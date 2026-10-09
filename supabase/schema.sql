@@ -215,3 +215,40 @@ create policy designs_update on public.designs
 create policy designs_delete on public.designs
   for delete to authenticated
   using (created_by = (select auth.uid()) or private.is_admin());
+
+-- ---------------------------------------------------- 2026-10-09 additions
+-- Master pricing sheet: couplings, reels and support items alongside the
+-- polymers and braid. NULL price means "not priced yet", kept distinct from
+-- free; the client drops NULLs so the engine reports them as missing.
+alter table public.price_book_items drop constraint if exists price_book_items_kind_check;
+alter table public.price_book_items add constraint price_book_items_kind_check
+  check (kind in ('polymer','braid','coupling','reel','support'));
+alter table public.price_book_items alter column price drop not null;
+alter table public.price_book_items drop constraint if exists price_book_items_price_check;
+alter table public.price_book_items add constraint price_book_items_price_check
+  check (price is null or price >= 0);
+alter table public.price_book_items add column if not exists label text;
+alter table public.price_book_items add column if not exists sort integer not null default 0;
+
+-- profiles_update_self originally read profiles from inside a policy ON
+-- profiles, which made Postgres recurse. The lookups live in SECURITY DEFINER
+-- helpers instead, which bypass RLS.
+create or replace function private.my_role()
+returns text language sql stable security definer set search_path = '' as $$
+  select p.role from public.profiles p where p.id = (select auth.uid());
+$$;
+create or replace function private.my_is_active()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select p.is_active from public.profiles p where p.id = (select auth.uid());
+$$;
+grant execute on function private.my_role(), private.my_is_active() to authenticated;
+
+drop policy if exists profiles_update_self on public.profiles;
+create policy profiles_update_self on public.profiles
+  for update to authenticated
+  using (id = (select auth.uid()))
+  with check (
+    id = (select auth.uid())
+    and role      = private.my_role()
+    and is_active = private.my_is_active()
+  );

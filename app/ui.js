@@ -4,13 +4,14 @@
 import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
-  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, SPOOL_REF, SPOOL_STRAIN
+  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
 } from "./data.js";
-import { solve, solveSpool } from "./engine.js";
+import { solve, solveSpool, matKey } from "./engine.js";
 import * as DB from "./db.js";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
+let SHEET_ROWS = [];              // full price sheet for the current book, incl. unpriced
 let PRICES = { polymer: {}, braid: {}, coupling: {} };
 let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
@@ -264,7 +265,7 @@ function renderDisplay() {
 /* =====================================================================
    sheet renderers
    ===================================================================== */
-const SHEETS = ["TDS","MDS","MDS (2)","CDS","MDS1","WO","Materials","Trace"];
+const SHEETS = ["TDS","MDS","MDS (2)","CDS","MDS1","WO","Materials","Pricing","Users","Trace"];
 
 function renderTabs() {
   document.getElementById("tabs").innerHTML = SHEETS.map(s =>
@@ -667,7 +668,8 @@ function renderPanel() {
   const r = R, p = document.getElementById("panel");
   p.innerHTML = ({
     "TDS": sheetTDS, "MDS": sheetMDS, "MDS (2)": sheetMDS2, "CDS": sheetCDS,
-    "MDS1": sheetMDS1, "WO": sheetWO, "Materials": sheetMaterials, "Trace": sheetTrace
+    "MDS1": sheetMDS1, "WO": sheetWO, "Materials": sheetMaterials,
+    "Pricing": sheetPricing, "Users": sheetUsers, "Trace": sheetTrace
   }[TAB] || sheetTDS)(r);
 }
 
@@ -723,20 +725,286 @@ function renderSpoolOutputs(r) {
   ]);
   document.getElementById("spoolWarns").innerHTML = r.warnings.map(w => `<li>${esc(w)}</li>`).join("");
 
-  document.getElementById("spoolWraps").innerHTML = tbl(
-    ["Wrap",{t:"OD Total (in)",n:1},{t:"Added (ft)",n:1},{t:"Cumulative (ft)",n:1},{t:"Cumulative (m)",n:1}],
-    r.wraps.map(w => ({ cls: w.odTotal <= r.sp ? "" : "", cells:[
-      {v:f0(w.n),n:1},{v:f0(w.odTotal),n:1},{v:f0(w.addFt),n:1},
-      {v:f0(w.lenFt),n:1},{v:f0(w.lenFt/3.28),n:1}]})));
-  document.getElementById("spoolRef").innerHTML = tbl(
-    ["Product","Reel","Max reel","One wrap less","Target","Min D"],
-    SPOOL_REF.map(x => x.map(c => esc(c))));
-  document.getElementById("spoolStrain").innerHTML = tbl(
-    ["Condition",{t:"Elongation",n:1},{t:"Δ elong.",n:1},{t:"OD (in)",n:1},{t:"Δ OD",n:1}],
-    SPOOL_STRAIN.map((x,i) => [esc(x[0]), {v:f3(x[1]),n:1},
-      {v:i===0?"—":pct(x[1]/SPOOL_STRAIN[0][1]-1,2),n:1},
-      {v:f3(x[3]),n:1}, {v:i===0?"—":pct(x[3]/SPOOL_STRAIN[0][3]-1,2),n:1}]));
 }
+
+
+/* =====================================================================
+   Pricing tab — the master pricing sheet.
+   Read-only for viewers and estimators; editable for admins, which is
+   what the RLS policies allow. A blank price means "not priced yet" and
+   is kept distinct from zero.
+   ===================================================================== */
+const KIND_LABEL = {
+  polymer:"Polymers & compounds", braid:"Braid & longs",
+  coupling:"Couplings, flanges & splices", reel:"Reels", support:"Support items"
+};
+const KIND_ORDER = ["polymer","braid","coupling","reel","support"];
+
+function sheetPricing() {
+  const admin = ME && ME.role === "admin";
+  const usedKeys = new Set([
+    matKey(R.liner), matKey(R.bond), matKey(R.backer), matKey(R.jacket), matKey(R.colorMB),
+    R.xbraid, R.longsName, (R.is24T ? R.tBraid : null), R.couplingName
+  ].filter(Boolean));
+
+  const books = BOOKS.map(b =>
+    `<option value="${esc(b.id)}"${BOOK && b.id === BOOK.id ? " selected":""}>${
+      esc(b.name)} — ${esc(b.status)}</option>`).join("");
+
+  const header = `
+    <div class="savebar">
+      <select id="pbPick" title="Price book to view or edit">${books}</select>
+      ${admin ? `
+        <button id="pbCopy">Duplicate as draft</button>
+        ${BOOK && BOOK.status !== "active" ? `<button class="pri" id="pbActivate">Make active</button>` : ""}
+      ` : ""}
+      <span id="pbStatus"></span>
+    </div>
+    <p class="ref">${BOOK ? `<b>${esc(BOOK.name)}</b> · ${esc(BOOK.status)} · effective ${esc(BOOK.effective_from)}
+      · ${SHEET_ROWS.length} items, ${SHEET_ROWS.filter(i=>i.price!=null).length} priced.` : ""}
+      ${admin ? "Edit a price and it saves when you leave the box. Blank means not priced yet, which the engine reports rather than costing as zero."
+              : "Only an administrator can change prices."}</p>`;
+
+  const section = kind => {
+    const rows = SHEET_ROWS.filter(i => i.kind === kind);
+    if (!rows.length && !admin) return "";
+    const body = rows.map(i => {
+      const used = usedKeys.has(i.item_key);
+      const priceCell = admin
+        ? `<input class="pbPrice" data-id="${esc(i.id)}" type="number" step="0.0001" min="0"
+             value="${i.price == null ? "" : i.price}" placeholder="not set"
+             style="width:100px;text-align:right">`
+        : (i.price == null ? `<span class="wn">not set</span>` : money(i.price, 4));
+      return { cls: used ? "tot" : "", cells: [
+        esc(i.label || i.item_key),
+        { v: `<span class="ref">${esc(i.item_key)}</span>`, raw:true },
+        { v: priceCell, n:1, raw:true },
+        esc(i.unit),
+        esc(i.source_note || "—"),
+        { v: used ? '<span class="ok">● in this design</span>' : "", raw:true },
+        { v: admin ? `<button data-rm="${esc(i.id)}" title="Remove this item">×</button>` : "", raw:true }
+      ]};
+    });
+    const addRow = admin ? `
+      <div class="savebar" style="margin:8px 0 0">
+        <input class="pbNewKey"   data-kind="${kind}" placeholder="Item key (must match the engine)" style="flex:1 1 240px">
+        <input class="pbNewLabel" data-kind="${kind}" placeholder="Display label" style="flex:1 1 160px">
+        <input class="pbNewPrice" data-kind="${kind}" type="number" step="0.0001" placeholder="price" style="width:100px">
+        <button data-add="${kind}">Add</button>
+      </div>` : "";
+    return `<h4>${esc(KIND_LABEL[kind])}</h4>` + tbl(
+      ["Item","Key",{t:"Price",n:1},"Unit","Note","","",], body) + addRow;
+  };
+
+  return header + KIND_ORDER.map(section).join("") + `
+    <p class="ref" style="margin-top:20px">Couplings and reels are stored here but are not yet
+    consumed by the $/ft engine &mdash; they are for quoting, which is not built. Polymer and braid
+    prices do drive the cost build-up.</p>`;
+}
+
+async function reloadSheet() {
+  if (!BOOK) { SHEET_ROWS = []; return; }
+  try { SHEET_ROWS = await DB.loadPriceSheet(BOOK.id); }
+  catch (err) { SHEET_ROWS = []; }
+}
+
+function pbStatus(msg, bad) {
+  const el = document.getElementById("pbStatus");
+  if (!el) return;
+  el.textContent = msg; el.className = bad ? "bad" : "ok";
+  if (!bad) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3000);
+}
+
+/* Save a price on blur, not on keystroke, so typing is never interrupted. */
+document.addEventListener("change", async e => {
+  const box = e.target.closest(".pbPrice");
+  if (!box) return;
+  try {
+    await DB.setItemPrice(box.dataset.id, box.value === "" ? null : box.value);
+    const row = SHEET_ROWS.find(i => i.id === box.dataset.id);
+    if (row) row.price = box.value === "" ? null : Number(box.value);
+    await useBook(BOOK.id);          // re-cost the design against the new figure
+    pbStatus("Saved.");
+  } catch (err) { pbStatus(err.message, true); }
+});
+
+document.addEventListener("click", async e => {
+  const add = e.target.closest("[data-add]");
+  const rm  = e.target.closest("[data-rm]");
+  const cp  = e.target.closest("#pbCopy");
+  const act = e.target.closest("#pbActivate");
+
+  if (add) {
+    const kind = add.dataset.add;
+    const q = s => document.querySelector(`.${s}[data-kind="${kind}"]`);
+    const key = q("pbNewKey").value.trim();
+    if (!key) { pbStatus("An item key is required.", true); return; }
+    try {
+      await DB.addItem(BOOK.id, { kind, item_key: key,
+        label: q("pbNewLabel").value.trim(), price: q("pbNewPrice").value });
+      await useBook(BOOK.id);
+      pbStatus(`Added ${key}.`);
+    } catch (err) { pbStatus(err.message, true); }
+  }
+
+  if (rm) {
+    if (!confirm("Remove this item from the price book?")) return;
+    try { await DB.removeItem(rm.dataset.rm); await useBook(BOOK.id); pbStatus("Removed."); }
+    catch (err) { pbStatus(err.message, true); }
+  }
+
+  if (cp) {
+    const name = prompt("Name for the new draft book:",
+                        `${BOOK.name} (revised ${new Date().toISOString().slice(0,10)})`);
+    if (!name) return;
+    try {
+      const b = await DB.copyPriceBook(BOOK.id, name, new Date().toISOString().slice(0,10));
+      BOOKS = await DB.listPriceBooks();
+      await useBook(b.id);
+      pbStatus(`Created "${name}" as a draft.`);
+    } catch (err) { pbStatus(err.message, true); }
+  }
+
+  if (act) {
+    if (!confirm(`Make "${BOOK.name}" the active price book? Every new costing will use it.`)) return;
+    try {
+      await DB.activatePriceBook(BOOK.id);
+      BOOKS = await DB.listPriceBooks();
+      await useBook(BOOK.id);
+      pbStatus("Activated.");
+    } catch (err) { pbStatus(err.message, true); }
+  }
+});
+
+document.addEventListener("change", async e => {
+  if (e.target.id !== "pbPick") return;
+  await useBook(e.target.value);
+});
+
+
+/* =====================================================================
+   Users tab — admin only.
+   Role and activation are ordinary table writes guarded by RLS. Creating
+   and deleting accounts goes through the admin-users Edge Function,
+   because only it holds the service-role key.
+   ===================================================================== */
+let USERS = [];
+
+function sheetUsers() {
+  if (!ME || ME.role !== "admin")
+    return `<h4>Users</h4><p class="ref">Only an administrator can manage accounts.
+      You are signed in as <b>${esc(ME ? ME.role : "?")}</b>.</p>`;
+
+  const rows = USERS.map(u => {
+    const self = ME && u.id === ME.id;
+    return { cls: self ? "tot" : "", cells: [
+      esc(u.full_name || "—"),
+      esc(u.email),
+      { v: `<select class="usrRole" data-id="${esc(u.id)}"${self ? " disabled" : ""}>` +
+           ["viewer","estimator","admin"].map(r =>
+             `<option value="${r}"${u.role===r?" selected":""}>${r}</option>`).join("") +
+           `</select>`, raw:true },
+      { v: u.is_active
+            ? `<span class="ok">active</span>`
+            : `<span class="wn">pending</span>`, raw:true },
+      { v: self ? `<span class="ref">you</span>` : `
+          <button data-act="${esc(u.id)}" data-to="${u.is_active ? "off" : "on"}">${
+            u.is_active ? "Deactivate" : "Activate"}</button>
+          <button data-pw="${esc(u.id)}">Reset password</button>
+          <button data-delu="${esc(u.id)}">Delete</button>`, raw:true }
+    ]};
+  });
+
+  return `<h4>Team accounts</h4>` +
+    tbl(["Name","Email","Role","Status","Actions"], rows) + `
+    <p class="ref">A role change saves immediately. <b>viewer</b> reads designs and prices,
+      <b>estimator</b> can also save designs, <b>admin</b> can additionally change prices and
+      manage accounts. You cannot change your own role or delete yourself, and the last active
+      administrator cannot be removed.</p>
+
+    <h4>Add an account</h4>
+    <div class="savebar">
+      <input id="nuName"  placeholder="Full name" style="flex:1 1 150px">
+      <input id="nuEmail" type="email" placeholder="Email" style="flex:1 1 200px">
+      <input id="nuPass"  type="text" placeholder="Temporary password (min 10)" style="flex:1 1 200px">
+      <select id="nuRole">
+        <option value="viewer">viewer</option>
+        <option value="estimator" selected>estimator</option>
+        <option value="admin">admin</option>
+      </select>
+      <button class="pri" id="nuAdd">Create</button>
+      <span id="usrStatus"></span>
+    </div>
+    <p class="ref">The account works immediately &mdash; no confirmation email. Give the person
+      the temporary password and have them change it. Creating accounts runs in a server-side
+      function that holds the privileged key; the browser never sees it.</p>`;
+}
+
+async function reloadUsers() {
+  if (!ME || ME.role !== "admin") { USERS = []; return; }
+  try { USERS = await DB.listProfiles(); } catch (err) { USERS = []; }
+}
+
+function usrStatus(msg, bad) {
+  const el = document.getElementById("usrStatus");
+  if (!el) { if (bad) alert(msg); return; }
+  el.textContent = msg; el.className = bad ? "bad" : "ok";
+  if (!bad) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
+}
+
+document.addEventListener("change", async e => {
+  const sel = e.target.closest(".usrRole");
+  if (!sel) return;
+  try {
+    await DB.setProfile(sel.dataset.id, { role: sel.value });
+    await reloadUsers(); renderPanel();
+    usrStatus("Role updated.");
+  } catch (err) { usrStatus(err.message, true); }
+});
+
+document.addEventListener("click", async e => {
+  const act = e.target.closest("[data-act]");
+  const pw  = e.target.closest("[data-pw]");
+  const del = e.target.closest("[data-delu]");
+  const add = e.target.closest("#nuAdd");
+
+  if (act) {
+    try {
+      await DB.setProfile(act.dataset.act, { is_active: act.dataset.to === "on" });
+      await reloadUsers(); renderPanel();
+      usrStatus(act.dataset.to === "on" ? "Activated." : "Deactivated.");
+    } catch (err) { usrStatus(err.message, true); }
+  }
+
+  if (pw) {
+    const p = prompt("New password for this account (at least 10 characters):");
+    if (!p) return;
+    try { await DB.resetPassword(pw.dataset.pw, p); usrStatus("Password reset."); }
+    catch (err) { usrStatus(err.message, true); }
+  }
+
+  if (del) {
+    const u = USERS.find(x => x.id === del.dataset.delu);
+    if (!confirm(`Delete the account for ${u ? u.email : "this user"}? This cannot be undone. `
+               + `Any designs they saved are kept and reassigned to you.`)) return;
+    try { await DB.deleteUser(del.dataset.delu); await reloadUsers(); renderPanel();
+          usrStatus("Account deleted."); }
+    catch (err) { usrStatus(err.message, true); }
+  }
+
+  if (add) {
+    const name  = document.getElementById("nuName").value.trim();
+    const email = document.getElementById("nuEmail").value.trim();
+    const pass  = document.getElementById("nuPass").value;
+    const role  = document.getElementById("nuRole").value;
+    if (!email || !pass) { usrStatus("Email and a temporary password are required.", true); return; }
+    try {
+      await DB.createUser(email, pass, role, name);
+      await reloadUsers(); renderPanel();
+      usrStatus(`Created ${email} as ${role}.`);
+    } catch (err) { usrStatus(err.message, true); }
+  }
+});
 
 /* =====================================================================
    wiring
@@ -804,6 +1072,8 @@ async function useBook(bookId) {
   BOOK = await DB.loadPriceBook(bookId || null);
   PRICES = BOOK.prices;
   I.priceBookId = BOOK.id;
+  await reloadSheet();
+  await reloadUsers();
   const sel = document.getElementById("priceBasis");
   if (sel) sel.value = BOOK.id;
   recalc();

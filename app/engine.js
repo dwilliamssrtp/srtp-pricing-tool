@@ -29,7 +29,7 @@ function vlookupApprox(key, pairs) {
   for (const [k, v] of pairs) { if (k <= key + EPS) hit = v; else break; }
   return hit;
 }
-const matKey = n => (n || "").trim();
+export const matKey = n => (n || "").trim();
 function mat(name, prices) {
   const k = matKey(name);
   const m = MATERIALS[k];
