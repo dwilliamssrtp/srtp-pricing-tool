@@ -5,11 +5,12 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
-} from "./data.js?v=20261009-1317";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1317";
-import * as DB from "./db.js?v=20261009-1317";
-import { initPages } from "./pages.js?v=20261009-1317";
-import * as PARTSUI from "./partsui.js?v=20261009-1317";
+} from "./data.js?v=20261009-1339";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1339";
+import * as DB from "./db.js?v=20261009-1339";
+import { initPages } from "./pages.js?v=20261009-1339";
+import * as PARTSUI from "./partsui.js?v=20261009-1339";
+import * as QUOTESUI from "./quotesui.js?v=20261009-1339";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -19,7 +20,7 @@ let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261009-1317";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261009-1339";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -240,7 +241,7 @@ function renderDisplay() {
       vd(r.psi<=r.couplingMaxP?"OK":"Exceeded", r.psi<=r.couplingMaxP), {v:"B12",cls:"ref"}]
   ]);
 
-  const L = (n,w,p,c) => [esc(n), {v:f4(w),n:1}, {v:money(p,3),n:1}, {v:money(c,4),n:1},
+  const L = (n,w,p,c) => [, {v:f4(w),n:1}, {v:money(p,3),n:1}, {v:money(c,4),n:1},
                           {v:money(c*r.lengthFt,0),n:1}];
   document.getElementById("costTbl").innerHTML = tbl(
     ["Layer","lbs/ft","$/lb","$/ft",{t:"Project $",n:1}], [
@@ -289,7 +290,7 @@ function sheetTDS(r) {
     [{v:"Project",k:1},{v:r.client||"—",span:5}]
   ]);
   const layer = (n, name, wt, price) => [
-    {v:n,n:1},esc(name),{v:f4(wt)+" lbs/ft",n:1},
+    {v:n,n:1}, ,{v:f4(wt)+" lbs/ft",n:1},
     {v:f0(Math.ceil(wt*r.lengthFt))+" lbs",n:1},{v:money(price,3),n:1}];
   const body = tbl(["#","Layer / Material",{t:"Theoretical",n:1},{t:"Project Weight",n:1},{t:"Price ($/lb)",n:1}], [
     {group:"1 · Base"},
@@ -315,32 +316,32 @@ function mdsBlock(r, fatBurst, reelHub, cellRef) {
     {group:"1 · Base Tube"},
     [{v:1,n:1},"Base Tube",{v:"",n:1},"0-5%",{v:f3(r.specWT),n:1},'±0.01"',
      {v:f3(r.linerID),n:1},'±0.01"',{v:f3(r.baseOD),n:1},"Tgt."],
-    [{v:"",n:1},esc(r.base[0].name),{v:f(r.base[0].wt*r.lengthFt,1)+" lbs",n:1},"",
+    [{v:"",n:1}, ,{v:f(r.base[0].wt*r.lengthFt,1)+" lbs",n:1},"",
      {v:f3(r.skinThk),n:1},"",{v:f3(r.base[0].id),n:1},"",{v:f3(r.base[0].od),n:1},""],
-    [{v:"",n:1},esc(r.base[1].name),{v:f(r.base[1].wt*r.lengthFt,1)+" lbs",n:1},"",
+    [{v:"",n:1}, ,{v:f(r.base[1].wt*r.lengthFt,1)+" lbs",n:1},"",
      {v:f3(r.bondThk),n:1},"",{v:f3(r.base[1].id),n:1},"",{v:f3(r.base[1].od),n:1},""],
-    [{v:"",n:1},esc(r.base[2].name),{v:f(r.base[2].wt*r.lengthFt,1)+" lbs",n:1},"",
+    [{v:"",n:1}, ,{v:f(r.base[2].wt*r.lengthFt,1)+" lbs",n:1},"",
      {v:f3(r.backerThk),n:1},"",{v:f3(r.base[2].id),n:1},"",{v:f3(r.baseOD),n:1},""]
   ]);
   const kg = x => `${f(x,2)} (${f(x/2.2,3)})`;
   const br = tbl(["#","Layer",{t:"Nb",n:1},{t:"lbs (kg)",n:1},{t:"Pitch",n:1},"Tol.",{t:"OD",n:1},"Tol."], [
     {group:"2 · Braid"},
-    [{v:2,n:1},esc(r.longsName),{v:f0(r.longsQty),n:1},{v:kg(r.longsWtRaw*r.lengthFt),n:1},
+    [{v:2,n:1}, ,{v:f0(r.longsQty),n:1},{v:kg(r.longsWtRaw*r.lengthFt),n:1},
      {v:"",n:1},"",{v:"",n:1},""],
-    [{v:"",n:1},esc(r.xbraid),{v:"Pass 1",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
+    [{v:"",n:1}, ,{v:"Pass 1",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
      {v:f(r.pitch),n:1},"±0.040in",{v:f3(r.A57),n:1},"Tgt."],
-    ...(r.passes>=2?[[{v:"",n:1},esc(r.xbraid),{v:"Pass 2",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
+    ...(r.passes>=2?[[{v:"",n:1}, ,{v:"Pass 2",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
      {v:f(r.pitch2),n:1},"±0.040in",{v:f3(r.A58),n:1},"Tgt."]]:[]),
-    ...(r.passes>=3?[[{v:"",n:1},esc(r.xbraid),{v:"Pass 3",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
+    ...(r.passes>=3?[[{v:"",n:1}, ,{v:"Pass 3",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
      {v:f(r.pitch3),n:1},"±0.040in",{v:f3(r.A59),n:1},"Tgt."]]:[]),
     ...(r.is24T?[[{v:"",n:1},"24-Tensile · "+esc(r.tBraid),{v:f0(24),n:1},
      {v:kg(r.tWt*r.lengthFt),n:1},{v:f(r.tPitch),n:1},"±0.040in",{v:"",n:1},""]]:[])
   ]);
   const cv = tbl(["#","Layer",{t:"Weight",n:1},{t:"Min Thick.",n:1},{t:"Thick.",n:1},"Tol.",{t:"OD",n:1},"Tol."], [
     {group:"3 · Cover"},
-    [{v:3,n:1},esc(r.jacket),{v:f(r.jacketWt*r.lengthFt,1)+" lbs",n:1},{v:"≥0.07",n:1},
+    [{v:3,n:1}, ,{v:f(r.jacketWt*r.lengthFt,1)+" lbs",n:1},{v:"≥0.07",n:1},
      {v:f4(r.jacketThk),n:1},'±0.01"',{v:f3(r.jacketOD),n:1},'±0.01"'],
-    [{v:"",n:1},esc(r.colorMB),{v:f(r.colorWt*r.lengthFt,1)+" lbs",n:1},{v:"",n:1},
+    [{v:"",n:1}, ,{v:f(r.colorWt*r.lengthFt,1)+" lbs",n:1},{v:"",n:1},
      {v:"",n:1},"",{v:"",n:1},""]
   ]);
   const minD = r.jacketOD ? reelHub / r.jacketOD : 0;
@@ -399,26 +400,26 @@ function sheetMDS2(r) {
                     {t:"ID (in) ±0.01",n:1},{t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], [
     [{v:1,n:1},esc(r.base[0].name)+" | ≥0.025",{v:f3(r.skinThk),n:1},{v:f3(r.base[0].od),n:1},
      {v:f3(r.base[0].id),n:1},{v:f4(r.base[0].wt),n:1},{v:f0(Math.ceil(r.base[0].wt*r.lengthFt)),n:1}],
-    [{v:"",n:1},esc(r.base[1].name),{v:f3(r.bondThk),n:1},{v:f3(r.base[1].od),n:1},
+    [{v:"",n:1}, ,{v:f3(r.bondThk),n:1},{v:f3(r.base[1].od),n:1},
      {v:f3(r.base[1].id),n:1},{v:f4(r.base[1].wt),n:1},{v:f0(Math.ceil(r.base[1].wt*r.lengthFt)),n:1}],
-    [{v:"",n:1},esc(r.base[2].name),{v:f3(r.backerThk),n:1},{v:f3(r.base[2].od),n:1},
+    [{v:"",n:1}, ,{v:f3(r.backerThk),n:1},{v:f3(r.base[2].od),n:1},
      {v:f3(r.base[2].id),n:1},{v:f4(r.base[2].wt),n:1},{v:f0(Math.ceil(r.base[2].wt*r.lengthFt)),n:1}],
     {cls:"tot",cells:[{v:"",n:1},"Base total",{v:f3(r.specWT),n:1},{v:f3(r.baseOD),n:1},{v:"",n:1},
       {v:f4(r.baseWt),n:1},{v:f0(Math.ceil(r.baseWt*r.lengthFt)),n:1}]}
   ]);
-  const rows = [[{v:2,n:1},esc(r.longsName),{v:f0(r.longsQty),n:1},{v:"",n:1},{v:"",n:1},
+  const rows = [[{v:2,n:1}, ,{v:f0(r.longsQty),n:1},{v:"",n:1},{v:"",n:1},
                  {v:f4(r.longsWt),n:1},{v:f0(Math.ceil(r.longsWt*r.lengthFt)),n:1}],
-                [{v:"",n:1},esc(r.xbraid),{v:"Pass #1",n:1},{v:f(r.pitch),n:1},{v:f3(r.A56),n:1},
+                [{v:"",n:1}, ,{v:"Pass #1",n:1},{v:f(r.pitch),n:1},{v:f3(r.A56),n:1},
                  {v:f4(r.xWt),n:1},{v:f0(Math.ceil(r.xWt*r.lengthFt)),n:1}]];
-  if (r.passes>=2) rows.push([{v:"",n:1},esc(r.xbraid),{v:"Pass #2",n:1},{v:f(r.pitch2),n:1},{v:f3(r.A57),n:1},{v:"",n:1},{v:"",n:1}]);
-  if (r.passes>=3) rows.push([{v:"",n:1},esc(r.xbraid),{v:"Pass #3",n:1},{v:f(r.pitch3),n:1},{v:f3(r.A58),n:1},{v:"",n:1},{v:"",n:1}]);
+  if (r.passes>=2) rows.push([{v:"",n:1}, ,{v:"Pass #2",n:1},{v:f(r.pitch2),n:1},{v:f3(r.A57),n:1},{v:"",n:1},{v:"",n:1}]);
+  if (r.passes>=3) rows.push([{v:"",n:1}, ,{v:"Pass #3",n:1},{v:f(r.pitch3),n:1},{v:f3(r.A58),n:1},{v:"",n:1},{v:"",n:1}]);
   const braid = tbl(["#","Braid",{t:"Number / Pass",n:1},{t:"Pitch (in) ±0.01",n:1},
                      {t:"OD (in) ±0.01",n:1},{t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], rows);
   const cover = tbl(["#","Cover",{t:"Wall (in)",n:1},{t:"OD (in) ±0.01",n:1},{t:"ID (in) ±0.01",n:1},
                      {t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], [
-    [{v:3,n:1},esc(r.jacket),{v:f4(r.jacketThk),n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.jacketID),n:1},
+    [{v:3,n:1}, ,{v:f4(r.jacketThk),n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.jacketID),n:1},
      {v:f4(r.jacketWt),n:1},{v:f0(Math.ceil(r.jacketWt*r.lengthFt)),n:1}],
-    [{v:"",n:1},esc(r.colorMB),{v:"",n:1},{v:"",n:1},{v:"",n:1},
+    [{v:"",n:1}, ,{v:"",n:1},{v:"",n:1},{v:"",n:1},
      {v:f4(r.colorWt),n:1},{v:f0(Math.ceil(r.colorWt*r.lengthFt)),n:1}],
     {cls:"tot",cells:[{v:"",n:1},"Finished product",{v:"",n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.linerID),n:1},
       {v:f3(r.weightPerFt),n:1},{v:f0(Math.ceil(r.weightPerFt*r.lengthFt)),n:1}]}
@@ -500,9 +501,9 @@ function sheetMaterials(r) {
       const used = [matKey(r.liner),matKey(r.bond),matKey(r.backer),matKey(r.jacket),matKey(r.colorMB)].includes(k);
       const p = PP[k];
       return { cls: used ? "tot" : "", cells:[
-        esc(k), {v:f(m.sg),n:1},
+        k, {v:f(m.sg),n:1},
         {v: p === undefined ? '<span class="bad">no price</span>' : money(p,3), n:1, raw: p === undefined},
-        {v:m.comp?f0(m.comp):"—",n:1}, esc(m.acr||"—"), esc(m.alt||"—"),
+        {v:m.comp?f0(m.comp):"—",n:1}, , esc(m.alt||"—"),
         {v:used?'<span class="ok">● used</span>':"",raw:true}]};
     }));
   const br = tbl(["Braid","Type",{t:"lbs/ft per end",n:1},{t:"Width (in)",n:1},
@@ -510,7 +511,7 @@ function sheetMaterials(r) {
     Object.keys(BRAID).map(k => {
       const b = BRAID[k], p = PB[k];
       const used = [r.xbraid,r.longsName,(r.is24T?r.tBraid:null)].includes(k);
-      return { cls: used ? "tot":"", cells:[esc(k), esc(b.type), {v:f(b.wt,5),n:1}, {v:f(b.w),n:1},
+      return { cls: used ? "tot":"", cells:[, , {v:f(b.wt,5),n:1}, {v:f(b.w),n:1},
         {v:f0(b.str),n:1},
         {v: p === undefined ? '<span class="bad">no price</span>' : money(p), n:1, raw: p === undefined},
         {v:f4(b.od),n:1},
@@ -520,7 +521,7 @@ function sheetMaterials(r) {
                   {t:"OD post swage",n:1},{t:"Insert ID",n:1},{t:"Max psi",n:1},"In this design"],
     Object.keys(COUPLING_BY_NAME).map(k => {
       const c = COUPLING_BY_NAME[k], used = k === r.couplingName;
-      return { cls: used ? "tot":"", cells:[esc(k), {v:f(c.insert),n:1}, {v:f3(c.stem),n:1}, {v:f0(c.ribs),n:1},
+      return { cls: used ? "tot":"", cells:[, {v:f(c.insert),n:1}, {v:f3(c.stem),n:1}, {v:f0(c.ribs),n:1},
         {v:f3(c.odPost),n:1}, {v:f3(c.idIns),n:1}, {v:f0(c.maxP),n:1},
         {v:used?'<span class="ok">● selected</span>':"",raw:true}]};
     }));
@@ -541,9 +542,9 @@ function sheetMaterials(r) {
   ]);
   const pipeT = tbl(["Nominal","Jacket OD","ID","Liner ID","Spec WT","Skin","Bond","Backer","Label","Selected"],
     PIPE_ORDER.map(k => { const p = PIPE[k], used = k === r.sizeKey;
-      return { cls:used?"tot":"", cells:[esc(k), {v:p.O===null?"—":f3(p.O),n:1}, {v:p.P===null?"—":f3(p.P),n:1},
+      return { cls:used?"tot":"", cells:[, {v:p.O===null?"—":f3(p.O),n:1}, {v:p.P===null?"—":f3(p.P),n:1},
         {v:f3(p.Q),n:1}, {v:p.R===null?"—":f4(p.R),n:1}, {v:p.V===null?"—":f3(p.V),n:1},
-        {v:p.W===null?"—":f3(p.W),n:1}, {v:p.X===null?"—":f4(p.X),n:1}, esc(p.U||"—"),
+        {v:p.W===null?"—":f3(p.W),n:1}, {v:p.X===null?"—":f4(p.X),n:1}, ,
         {v:used?'<span class="ok">●</span>':"",raw:true}]};
     }));
   return `<h4>Polymer price book &mdash; ${esc(BOOK ? BOOK.name : "none loaded")}</h4>${live}
@@ -558,7 +559,7 @@ function sheetMaterials(r) {
 }
 
 function sheetTrace(r) {
-  const row = (cell, label, val) => [{v:cell,cls:"ref"}, esc(label), {v:val,n:1}];
+  const row = (cell, label, val) => [{v:cell,cls:"ref"}, , {v:val,n:1}];
   const t = (title, rows) => `<h4>${title}</h4>` + tbl(["Cell","Quantity",{t:"Value",n:1}], rows);
   return [
     t("Material selection — Inputs!A35:A43", [
@@ -780,11 +781,11 @@ function sheetPricing() {
              style="width:100px;text-align:right">`
         : (i.price == null ? `<span class="wn">not set</span>` : money(i.price, 4));
       return { cls: used ? "tot" : "", cells: [
-        esc(i.label || i.item_key),
+        i.label || i.item_key,
         { v: `<span class="ref">${esc(i.item_key)}</span>`, raw:true },
         { v: priceCell, n:1, raw:true },
-        esc(i.unit),
-        esc(i.source_note || "—"),
+        i.unit,
+        i.source_note || "—",
         { v: used ? '<span class="ok">● in this design</span>' : "", raw:true },
         { v: admin ? `<button data-rm="${esc(i.id)}" title="Remove this item">×</button>` : "", raw:true }
       ]};
@@ -904,8 +905,8 @@ function sheetUsers() {
   const rows = USERS.map(u => {
     const self = ME && u.id === ME.id;
     return { cls: self ? "tot" : "", cells: [
-      esc(u.full_name || "—"),
-      esc(u.email),
+      u.full_name || "—",
+      u.email,
       { v: `<select class="usrRole" data-id="${esc(u.id)}"${self ? " disabled" : ""}>` +
            ["viewer","estimator","admin"].map(r =>
              `<option value="${r}"${u.role===r?" selected":""}>${r}</option>`).join("") +
@@ -1102,11 +1103,11 @@ async function refreshDesignList() {
     if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">No saved designs yet.</p>`; return; }
     host.innerHTML = tbl(["Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
       rows.map(d => [
-        esc(d.name), esc(d.client || "—"),
+        d.name, ,
         {v: d.summary?.costPerFt != null ? money(d.summary.costPerFt) : "—", n:1},
         {v: d.summary?.weightPerFt != null ? f3(d.summary.weightPerFt) : "—", n:1},
         {v: d.summary?.burst != null ? f0(d.summary.burst) + " psi" : "—", n:1},
-        esc(new Date(d.updated_at).toLocaleDateString()),
+        new Date(d.updated_at).toLocaleDateString(),
         {v:`<button data-open="${esc(d.id)}">Open</button> <button data-del="${esc(d.id)}">Delete</button>`, raw:true}
       ]));
   } catch (err) { host.innerHTML = `<p class="bad" style="margin:0">${esc(err.message)}</p>`; }
@@ -1204,7 +1205,20 @@ async function enterApp(profile) {
     refresh: () => { if (PAGES) PAGES.refresh(); }
   });
 
-  PAGES = initPages({ pricingHTML: sheetPricing, usersHTML: sheetUsers });
+  QUOTESUI.init({
+    tbl, esc, money, f0, f, tiles,
+    isAdmin: () => ME && ME.role === "admin",
+    bookId:  () => BOOK && BOOK.id,
+    prices:  () => PRICES,
+    refresh: () => { if (PAGES) PAGES.refresh(); }
+  });
+  await QUOTESUI.loadRefs(BOOK && BOOK.id);
+  await QUOTESUI.loadList();
+
+  PAGES = initPages({
+    pricingHTML: sheetPricing, usersHTML: sheetUsers,
+    quotesHTML:  QUOTESUI.quotesHTML, archiveHTML: QUOTESUI.archiveHTML
+  });
   PAGES.showUsers(profile.role === "admin");
   PAGES.restore();
 

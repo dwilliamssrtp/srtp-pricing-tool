@@ -4,8 +4,8 @@
    Rendered into the Pricing page. Read-only for viewers and estimators,
    editable for admins, which is what the RLS policies allow.
    ===================================================================== */
-import * as DB from "./db.js?v=20261009-1317";
-import { ANSI_CLASSES } from "./parts.js?v=20261009-1317";
+import * as DB from "./db.js?v=20261009-1339";
+import { ANSI_CLASSES } from "./parts.js?v=20261009-1339";
 
 const PART_KIND_LABEL = {
   end_flange: "End flanges", lap_flange: "Lap flanges",
@@ -68,12 +68,12 @@ export function partsSection() {
           raw: p[field] == null };
 
     const body = rows.map(p => ({ cells: [
-      esc(p.label),
+      p.label,
       p.ansi_class ? "ANSI " + p.ansi_class : "—",
-      esc(p.material || p.reel_code || "—"),
+      p.material || p.reel_code || "—",
       cell(p, "cost", "not set"),
       cell(p, "list_price", "—"),
-      esc(p.unit),
+      p.unit,
       { v: admin ? `<button data-rmpart="${esc(p.id)}" title="Remove">×</button>` : "", raw: true }
     ]}));
     return `<h4>${esc(PART_KIND_LABEL[kind])} <span class="ref">(${rows.length} shown)</span></h4>`
@@ -119,7 +119,7 @@ export function speedsSection() {
       const rate = s.ft_per_min == null ? null
         : s.ft_per_min * 60 * 24 * (1 / (s.passes || 1)) * (s.efficiency ?? 0.8) * (s.braider_mult ?? 1);
       rows.push({ cells: [
-        esc(s.stage),
+        s.stage,
         num(s, "ft_per_min", 0.1),
         num(s, "passes", 1, 58),
         num(s, "efficiency", 0.05),
@@ -142,13 +142,13 @@ export function speedsSection() {
 export function settingsSection() {
   const { tbl, esc } = H, admin = H.isAdmin();
   const rows = SETTINGS.map(s => ({ cells: [
-    esc(s.label),
+    s.label,
     admin
       ? { v: `<input class="qset" data-key="${esc(s.key)}" type="number" step="0.01"
              value="${s.value == null ? "" : s.value}" style="width:118px;text-align:right">`,
           n: 1, raw: true }
       : { v: s.value == null ? "—" : String(s.value), n: 1 },
-    esc(s.unit || ""),
+    s.unit || "",
     { v: `<span class="ref">${esc(s.notes || "")}</span>`, raw: true }
   ]}));
   return `<h4>Quote settings</h4>` + tbl(["Setting", { t: "Value", n: 1 }, "Unit", "Note"], rows);

@@ -1,7 +1,7 @@
 /* =====================================================================
    Supabase client, session handling and data access.
    ===================================================================== */
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261009-1317";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261009-1339";
 
 const { createClient } = await import(SUPABASE_JS);
 
@@ -235,7 +235,7 @@ export const resetPassword = (id, password) => adminFn({ action:"password", id, 
 /* ---------------------------------------------- master cost sheet (parts) */
 export async function loadPartCosts(bookId) {
   const { data, error } = await sb.from("part_costs")
-    .select("id,kind,rtp_size,flange_size,flange_id,ansi_class,sealing,material,reel_code,label,cost,list_price,unit,notes,sort")
+    .select("id,kind,rtp_size,flange_size,flange_id,ansi_class,sealing,material,reel_code,label,cost,list_price,unit,notes,sort,is_placeholder")
     .eq("price_book_id", bookId)
     .order("kind").order("sort").order("label");
   if (error) throw error;
@@ -280,4 +280,93 @@ export async function setSetting(key, value) {
   const { error } = await sb.from("quote_settings")
     .update({ value: value === "" || value === null ? null : Number(value) }).eq("key", key);
   if (error) throw error;
+}
+
+/* ------------------------------------------------------------ customers */
+export async function listCustomers() {
+  const { data, error } = await sb.from("customers")
+    .select("id,name,contact,email,notes").order("name");
+  if (error) throw error;
+  return data || [];
+}
+export async function addCustomer(name, contact, email) {
+  const { data, error } = await sb.from("customers")
+    .insert({ name, contact: contact || null, email: email || null }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* --------------------------------------------------------------- quotes */
+export async function listQuotes(archived = false) {
+  const q = sb.from("quotes")
+    .select("id,number,title,status,customer_id,snapshot,created_at,updated_at,sent_at,customers(name)")
+    .order("updated_at", { ascending: false });
+  const { data, error } = archived
+    ? await q.eq("status", "archived")
+    : await q.neq("status", "archived");
+  if (error) throw error;
+  return data || [];
+}
+export async function loadQuote(id) {
+  const { data, error } = await sb.from("quotes")
+    .select("*,customers(name,contact,email)").eq("id", id).single();
+  if (error) throw error;
+  const { data: lines, error: e2 } = await sb.from("quote_lines")
+    .select("*").eq("quote_id", id).order("group_no").order("sort");
+  if (e2) throw e2;
+  return { ...data, lines: lines || [] };
+}
+export async function createQuote(row) {
+  const { data: { user } } = await sb.auth.getUser();
+  const { data, error } = await sb.from("quotes")
+    .insert({ ...row, created_by: user.id }).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function updateQuote(id, patch) {
+  const { error } = await sb.from("quotes").update(patch).eq("id", id);
+  if (error) throw error;
+}
+export async function deleteQuote(id) {
+  const { error } = await sb.from("quotes").delete().eq("id", id);
+  if (error) throw error;
+}
+export async function replaceQuoteLines(quoteId, lines) {
+  const { error: delErr } = await sb.from("quote_lines").delete().eq("quote_id", quoteId);
+  if (delErr) throw delErr;
+  if (!lines.length) return [];
+  const { data, error } = await sb.from("quote_lines")
+    .insert(lines.map(l => ({ ...l, quote_id: quoteId }))).select();
+  if (error) throw error;
+  return data;
+}
+
+/* Prior prices for the same customer and the same exact product signature. */
+export async function priceHistory(customerId, productKey) {
+  if (!customerId || !productKey) return [];
+  const { data, error } = await sb.from("quote_lines")
+    .select("unit_price,product_key,quotes!inner(id,number,created_at,sent_at,status,customer_id)")
+    .eq("product_key", productKey)
+    .eq("quotes.customer_id", customerId);
+  if (error) throw error;
+  return (data || []).map(r => ({
+    unit_price: r.unit_price,
+    product_key: r.product_key,
+    number: r.quotes.number,
+    status: r.quotes.status,
+    quoted_at: r.quotes.sent_at || r.quotes.created_at
+  }));
+}
+
+/* A costed part from the master cost sheet, matched as loosely as it must be. */
+export function findPart(parts, { kind, rtpSize, flangeSize, flangeId, ansiClass, material, reelCode }) {
+  return parts.find(p =>
+    p.kind === kind &&
+    (rtpSize    === undefined || String(p.rtp_size    ?? "") === String(rtpSize    ?? "")) &&
+    (flangeSize === undefined || String(p.flange_size ?? "") === String(flangeSize ?? "")) &&
+    (flangeId   === undefined || String(p.flange_id   ?? "") === String(flangeId   ?? "")) &&
+    (ansiClass  === undefined || Number(p.ansi_class  ?? 0)  === Number(ansiClass  ?? 0))  &&
+    (material   === undefined || String(p.material    ?? "") === String(material   ?? "")) &&
+    (reelCode   === undefined || String(p.reel_code   ?? "") === String(reelCode   ?? ""))
+  ) || null;
 }
