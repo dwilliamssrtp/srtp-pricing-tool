@@ -1,7 +1,7 @@
 /* =====================================================================
    Supabase client, session handling and data access.
    ===================================================================== */
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261009-1414";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261009-1530";
 
 const { createClient } = await import(SUPABASE_JS);
 
@@ -369,4 +369,12 @@ export function findPart(parts, { kind, rtpSize, flangeSize, flangeId, ansiClass
     (material   === undefined || String(p.material    ?? "") === String(material   ?? "")) &&
     (reelCode   === undefined || String(p.reel_code   ?? "") === String(reelCode   ?? ""))
   ) || null;
+}
+
+/* Every pipe line across all quotes, for searching the quote list by size. */
+export async function allPipeLines() {
+  const { data, error } = await sb.from("quote_lines")
+    .select("quote_id,label").eq("kind", "pipe");
+  if (error) throw error;
+  return data || [];
 }

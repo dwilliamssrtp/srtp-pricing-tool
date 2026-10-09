@@ -30,7 +30,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
-.wrap{max-width:1500px;margin:0 auto;padding:0 16px 80px}
+.wrap{max-width:1500px;margin:0 auto;padding:0 16px 40px}
 
 /* ---------- header ---------- */
 header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 88%,transparent);
@@ -65,34 +65,34 @@ input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;appearance:none;margin:0}
 
 /* ---------- layout ---------- */
-h2.sec{font-size:12px;text-transform:uppercase;letter-spacing:.16em;color:var(--ink3);
-  margin:30px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--line)}
-.top{display:grid;grid-template-columns:minmax(360px,460px) 1fr;gap:16px;align-items:start}
+h2.sec{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--ink3);
+  margin:18px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+.top{display:grid;grid-template-columns:minmax(340px,420px) 1fr;gap:12px;align-items:start}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .card>h3{margin:0;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;
   color:var(--ink2);background:var(--card2);border-bottom:1px solid var(--line)}
 .card>h3 small{float:right;font-family:var(--mono);text-transform:none;letter-spacing:0;color:var(--ink3)}
-.pad{padding:12px 14px}
+.pad{padding:10px 12px}
 
 /* ---------- input grid ---------- */
-.ig{display:grid;grid-template-columns:1fr 128px 92px;gap:6px 8px;align-items:center}
-.ig label{font-size:12.5px;color:var(--ink2)}
-.ig input,.ig select{width:100%;font-family:var(--mono);font-size:13px}
+.ig{display:grid;grid-template-columns:1fr 124px 56px;gap:3px 8px;align-items:center}
+.ig label{font-size:12px;color:var(--ink2);line-height:1.25}
+.ig input,.ig select{width:100%;font-family:var(--mono);font-size:12.5px;padding:3px 6px}
 .ig .u{font-family:var(--mono);font-size:11.5px;color:var(--ink3);text-align:left}
 .ig .wide{grid-column:1/-1}
-.ig .derived{font-family:var(--mono);font-size:13px;color:var(--accent2);padding:5px 8px;
+.ig .derived{font-family:var(--mono);font-size:12.5px;color:var(--accent2);padding:3px 6px;
   background:var(--bg2);border:1px dashed var(--line2);border-radius:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.grp{grid-column:1/-1;margin:10px 0 2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;
-  color:var(--accent);border-top:1px solid var(--line);padding-top:9px}
+.grp{grid-column:1/-1;margin:9px 0 1px;font-size:10px;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--accent);border-top:1px solid var(--line);padding-top:7px}
 .grp:first-child{border-top:0;margin-top:0;padding-top:0}
 
 /* ---------- KPI tiles ---------- */
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:10px}
-.tile{background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:7px}
+.tile{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
 .tile em{display:block;font-style:normal;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}
-.tile b{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.3px}
+.tile b{font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-.3px}
 .tile s{display:block;text-decoration:none;font-family:var(--mono);font-size:11px;color:var(--ink3);margin-top:2px}
-.tile.big b{font-size:23px;color:var(--accent)}
+.tile.big b{font-size:19px;color:var(--accent)}
 .tile.ok b{color:var(--ok)} .tile.bad b{color:var(--bad)}
 .banner{font-family:var(--mono);font-size:13px;padding:9px 12px;border-radius:8px;
   background:var(--bg2);border:1px solid var(--line);margin-bottom:12px;word-break:break-word}
@@ -230,7 +230,7 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
     <div class="pad">
       <div class="savebar">
         <input id="designName" type="text" placeholder="Design name" style="flex:1 1 220px">
-        <input id="designClient" type="text" placeholder="Client (optional)" style="flex:1 1 160px">
+        <input id="designClient" type="text" placeholder="Client" data-k="client" style="flex:1 1 160px">
         <button class="pri" id="saveBtn">Save</button>
         <button id="newBtn">New</button>
         <span id="saveStatus"></span>
@@ -335,6 +335,6 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261009-1414"></script>
+<script type="module" src="app/ui.js?v=20261009-1530"></script>
 </body>
 </html>

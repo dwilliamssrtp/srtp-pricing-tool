@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261009-1414";
-import { solve } from "./engine.js?v=20261009-1414";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1414";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1414";
+import * as DB from "./db.js?v=20261009-1530";
+import { solve } from "./engine.js?v=20261009-1530";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1530";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1530";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -19,6 +19,8 @@ let LIST = [], ARCHIVE = [];
 let CUR = null;                 // open quote {…, lines:[]}
 let VIEW = "list";              // list | editor | sales
 let HISTORY = {};               // product_key -> notice
+let QUOTE_SEARCH = "", ARCHIVE_SEARCH = "";
+let LINE_INDEX = {};            // quote id -> pipe descriptions, for searching
 
 export function init(helpers) { H = helpers; }
 
@@ -33,7 +35,8 @@ export async function loadRefs(bookId) {
   } catch (e) { /* surfaced by the page */ }
 }
 export async function loadList() {
-  try { [LIST, ARCHIVE] = await Promise.all([DB.listQuotes(false), DB.listQuotes(true)]); }
+  try { [LIST, ARCHIVE] = await Promise.all([DB.listQuotes(false), DB.listQuotes(true)]);
+        await buildLineIndex(); }
   catch (e) { LIST = []; ARCHIVE = []; }
 }
 
@@ -102,17 +105,54 @@ export function groupFromDesign(design, { groupNo, suppliedFt, connectionMateria
 const matShort = name => (CONNECTION_MATERIALS.find(m => m.name === name) || {}).short || null;
 
 /* ==================================================================== */
+/* Free-text search across a quote's number, title, customer, status and the
+   pipe descriptions on its lines — so "4.5" or "2200psi" finds the quotes
+   that carry that size, not just ones with it in the title. */
+function quoteHaystack(q) {
+  const lines = (LINE_INDEX[q.id] || []).join(" ");
+  return [q.number, q.title, q.customers ? q.customers.name : "", q.status, lines]
+    .join(" ").toLowerCase();
+}
+function filterQuotes(rows, term) {
+  const t = (term || "").trim().toLowerCase();
+  if (!t) return rows;
+  const words = t.split(/\s+/);
+  return rows.filter(q => { const h = quoteHaystack(q); return words.every(w => h.includes(w)); });
+}
+
 function listPage(rows, archived) {
-  const { tbl, esc, money, f0 } = H;
+  const { tbl, esc, money } = H;
+  const term = archived ? ARCHIVE_SEARCH : QUOTE_SEARCH;
+  const shown = filterQuotes(rows, term);
+
+  const search = `
+    <div class="savebar">
+      <input class="qsearch" data-scope="${archived ? "archive" : "quotes"}" type="search"
+        placeholder="Search number, title, customer or pipe size…" value="${esc(term)}"
+        style="flex:1 1 280px">
+      <span class="ref">${shown.length} of ${rows.length}${
+        term ? ` matching “${esc(term)}”` : ""}</span>
+      <span id="qStatus"></span>
+    </div>`;
+
   if (!rows.length) {
     return `<p class="ref">${archived ? "Nothing archived yet."
       : "No quotes yet. Start one below."}</p>` + (archived ? "" : newQuoteForm());
   }
-  const body = rows.map(q => {
+  if (!shown.length) {
+    return search + `<p class="ref">Nothing matches that search.</p>`
+         + (archived ? "" : newQuoteForm());
+  }
+
+  const body = shown.map(q => {
     const t = q.snapshot && q.snapshot.extended != null ? money(q.snapshot.extended, 0) : "—";
+    const sizes = [...new Set(LINE_INDEX[q.id] || [])].slice(0, 2).join(", ");
     return { cells: [
-      q.number, , esc(q.customers ? q.customers.name : "—"),
-      { v: `<span class="${q.status === "won" ? "ok" : q.status === "lost" ? "bad" : "wn"}">${esc(q.status)}</span>`, raw:true },
+      q.number,
+      q.title + (sizes ? `\n${sizes}` : ""),
+      q.customers ? q.customers.name : "—",
+      { v: `<span class="${q.status === "won" ? "ok" : q.status === "lost" ? "bad" : "wn"}">${
+        esc(q.status)}</span>`, raw:true },
       { v: t, n: 1 },
       new Date(q.updated_at).toLocaleDateString(),
       { v: `<button data-openq="${esc(q.id)}">Open</button>`
@@ -121,8 +161,8 @@ function listPage(rows, archived) {
          + ` <button data-delq="${esc(q.id)}">Delete</button>`, raw: true }
     ]};
   });
-  void f0;
-  return tbl(["Number","Title","Customer","Status",{t:"Total",n:1},"Updated",""], body)
+  return search
+       + tbl(["Number","Title / sizes","Customer","Status",{t:"Total",n:1},"Updated",""], body)
        + (archived ? "" : newQuoteForm());
 }
 
@@ -562,3 +602,24 @@ export async function reloadDesigns() {
 export async function reloadCustomers() {
   try { CUSTOMERS = await DB.listCustomers(); } catch (e) { /* keep the old list */ }
 }
+
+/* Pull every quote's pipe descriptions in one query so the list can be
+   searched by size or pressure without opening each quote. */
+async function buildLineIndex() {
+  try {
+    const rows = await DB.allPipeLines();
+    LINE_INDEX = {};
+    for (const r of rows) (LINE_INDEX[r.quote_id] ||= []).push(r.label);
+  } catch (e) { LINE_INDEX = {}; }
+}
+
+document.addEventListener("input", e => {
+  const box = e.target.closest(".qsearch");
+  if (!box || !H) return;
+  if (box.dataset.scope === "archive") ARCHIVE_SEARCH = box.value;
+  else QUOTE_SEARCH = box.value;
+  H.refresh();
+  // Re-focus: refresh() replaces the page body, which drops the caret.
+  const again = document.querySelector(`.qsearch[data-scope="${box.dataset.scope}"]`);
+  if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); }
+});

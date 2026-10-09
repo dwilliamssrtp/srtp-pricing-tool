@@ -5,12 +5,13 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
-} from "./data.js?v=20261009-1414";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1414";
-import * as DB from "./db.js?v=20261009-1414";
-import { initPages } from "./pages.js?v=20261009-1414";
-import * as PARTSUI from "./partsui.js?v=20261009-1414";
-import * as QUOTESUI from "./quotesui.js?v=20261009-1414";
+} from "./data.js?v=20261009-1530";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1530";
+import * as DB from "./db.js?v=20261009-1530";
+import { initPages } from "./pages.js?v=20261009-1530";
+import * as PARTSUI from "./partsui.js?v=20261009-1530";
+import * as QUOTESUI from "./quotesui.js?v=20261009-1530";
+import { optimise } from "./optimise.js?v=20261009-1530";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -19,8 +20,10 @@ let PRICES = { polymer: {}, braid: {}, coupling: {} };
 let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
+let AUTO_CFG = true;           // re-solve the braid when the duty changes
+let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261009-1414";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261009-1530";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -122,6 +125,11 @@ function updateDerived(r) {
   const g = document.getElementById("grp24t");
   if (g) g.innerHTML = "24-Tensile layer " +
     (I.app === "24-Tensile" ? "" : "&mdash; inactive, Application is " + esc(I.app));
+
+  // The save bar's client box mirrors the Designer's Client Name; they are
+  // one value, so typing in either keeps the other in step.
+  const cb = document.getElementById("designClient");
+  if (cb && document.activeElement !== cb) cb.value = I.client || "";
 }
 
 function renderInputs() {
@@ -146,6 +154,14 @@ function renderInputs() {
     derived("Select Coupling Size","d_coupling", r.couplingName || "no coupling tabulated"),
 
     `<div class="grp">Reinforcement</div>`,
+    `<label for="autoCfg">Auto-configure</label>
+     <label class="ref" style="grid-column:2/-1;display:flex;gap:7px;align-items:center">
+       <input id="autoCfg" type="checkbox"${AUTO_CFG ? " checked" : ""} style="width:auto">
+       cheapest braid that passes
+       <button id="optBtn" style="margin-left:auto;padding:3px 9px">Optimise now</button>
+     </label>`,
+    `<label>&nbsp;</label><div class="derived" id="d_opt" style="grid-column:2/-1"
+       title="${esc(OPT_NOTE)}">${esc(OPT_NOTE)}</div>`,
     field("X-braid (hoop)","xbraid","select",{opts:XBRAIDS}),
     field("Pitch","pitch","select",{opts:PITCH_LADDER,unit:"in"}),
     derived("Minimum pitch (braid width × 12)","d_minPitch", f(r.minPitch), "in"),
@@ -203,7 +219,8 @@ function renderDisplay() {
   document.getElementById("dispTiles").innerHTML = tiles([
     { k:"Burst strength",            v:f0(r.burstTotal)+" psi", cls:r.burstTotal>=r.targetBurstR?"ok":"bad", s:"Inputs!E21" },
     { k:"Target burst design (.67 SF)", v:f0(r.targetBurstR)+" psi", s:"Inputs!A21" },
-    { k:"SF added",                  v:f0(r.sfAdded)+" psi", cls:r.sfAdded>=0?"ok":"bad", s:pct(r.sfAddedPct)+" of MAOP" },
+    { k:"SF added",                  v:f0(r.sfAdded)+" psi", cls:r.sfAdded>=0?"ok":"bad", s:"over the design target" },
+    { k:"SF added %",                v:pct(r.sfAddedPct,1), cls:r.sfAddedPct>=0?"ok":"bad", s:"Inputs!AX8 &middot; of MAOP" },
     { k:"Min burst (API)",           v:f0(r.minBurst)+" psi", s:(r.xbraid||"").slice(0,2)==="KN"?"MAOP × 2.31":"MAOP × 2.00" },
     { k:"FAT min burst (no SF)",     v:f0(r.shortBurst)+" psi", s:"Inputs!B73" },
     { k:"Field hydrotest",           v:f0(r.hydroP)+" psi", s:"MAOP × "+f(r.hydroFactor,2) },
@@ -241,7 +258,7 @@ function renderDisplay() {
       vd(r.psi<=r.couplingMaxP?"OK":"Exceeded", r.psi<=r.couplingMaxP), {v:"B12",cls:"ref"}]
   ]);
 
-  const L = (n,w,p,c) => [, {v:f4(w),n:1}, {v:money(p,3),n:1}, {v:money(c,4),n:1},
+  const L = (n,w,p,c) => [n, {v:f4(w),n:1}, {v:money(p,3),n:1}, {v:money(c,4),n:1},
                           {v:money(c*r.lengthFt,0),n:1}];
   document.getElementById("costTbl").innerHTML = tbl(
     ["Layer","lbs/ft","$/lb","$/ft",{t:"Project $",n:1}], [
@@ -290,7 +307,7 @@ function sheetTDS(r) {
     [{v:"Project",k:1},{v:r.client||"—",span:5}]
   ]);
   const layer = (n, name, wt, price) => [
-    {v:n,n:1}, ,{v:f4(wt)+" lbs/ft",n:1},
+    {v:n,n:1}, name,{v:f4(wt)+" lbs/ft",n:1},
     {v:f0(Math.ceil(wt*r.lengthFt))+" lbs",n:1},{v:money(price,3),n:1}];
   const body = tbl(["#","Layer / Material",{t:"Theoretical",n:1},{t:"Project Weight",n:1},{t:"Price ($/lb)",n:1}], [
     {group:"1 · Base"},
@@ -316,32 +333,32 @@ function mdsBlock(r, fatBurst, reelHub, cellRef) {
     {group:"1 · Base Tube"},
     [{v:1,n:1},"Base Tube",{v:"",n:1},"0-5%",{v:f3(r.specWT),n:1},'±0.01"',
      {v:f3(r.linerID),n:1},'±0.01"',{v:f3(r.baseOD),n:1},"Tgt."],
-    [{v:"",n:1}, ,{v:f(r.base[0].wt*r.lengthFt,1)+" lbs",n:1},"",
+    [{v:"",n:1}, r.base[0].name,{v:f(r.base[0].wt*r.lengthFt,1)+" lbs",n:1},"",
      {v:f3(r.skinThk),n:1},"",{v:f3(r.base[0].id),n:1},"",{v:f3(r.base[0].od),n:1},""],
-    [{v:"",n:1}, ,{v:f(r.base[1].wt*r.lengthFt,1)+" lbs",n:1},"",
+    [{v:"",n:1}, r.base[1].name,{v:f(r.base[1].wt*r.lengthFt,1)+" lbs",n:1},"",
      {v:f3(r.bondThk),n:1},"",{v:f3(r.base[1].id),n:1},"",{v:f3(r.base[1].od),n:1},""],
-    [{v:"",n:1}, ,{v:f(r.base[2].wt*r.lengthFt,1)+" lbs",n:1},"",
+    [{v:"",n:1}, r.base[2].name,{v:f(r.base[2].wt*r.lengthFt,1)+" lbs",n:1},"",
      {v:f3(r.backerThk),n:1},"",{v:f3(r.base[2].id),n:1},"",{v:f3(r.baseOD),n:1},""]
   ]);
   const kg = x => `${f(x,2)} (${f(x/2.2,3)})`;
   const br = tbl(["#","Layer",{t:"Nb",n:1},{t:"lbs (kg)",n:1},{t:"Pitch",n:1},"Tol.",{t:"OD",n:1},"Tol."], [
     {group:"2 · Braid"},
-    [{v:2,n:1}, ,{v:f0(r.longsQty),n:1},{v:kg(r.longsWtRaw*r.lengthFt),n:1},
+    [{v:2,n:1}, r.longsName,{v:f0(r.longsQty),n:1},{v:kg(r.longsWtRaw*r.lengthFt),n:1},
      {v:"",n:1},"",{v:"",n:1},""],
-    [{v:"",n:1}, ,{v:"Pass 1",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
+    [{v:"",n:1}, r.xbraid,{v:"Pass 1",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
      {v:f(r.pitch),n:1},"±0.040in",{v:f3(r.A57),n:1},"Tgt."],
-    ...(r.passes>=2?[[{v:"",n:1}, ,{v:"Pass 2",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
+    ...(r.passes>=2?[[{v:"",n:1}, r.xbraid,{v:"Pass 2",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
      {v:f(r.pitch2),n:1},"±0.040in",{v:f3(r.A58),n:1},"Tgt."]]:[]),
-    ...(r.passes>=3?[[{v:"",n:1}, ,{v:"Pass 3",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
+    ...(r.passes>=3?[[{v:"",n:1}, r.xbraid,{v:"Pass 3",n:1},{v:kg(r.xWtPerPass*r.lengthFt),n:1},
      {v:f(r.pitch3),n:1},"±0.040in",{v:f3(r.A59),n:1},"Tgt."]]:[]),
     ...(r.is24T?[[{v:"",n:1},"24-Tensile · "+esc(r.tBraid),{v:f0(24),n:1},
      {v:kg(r.tWt*r.lengthFt),n:1},{v:f(r.tPitch),n:1},"±0.040in",{v:"",n:1},""]]:[])
   ]);
   const cv = tbl(["#","Layer",{t:"Weight",n:1},{t:"Min Thick.",n:1},{t:"Thick.",n:1},"Tol.",{t:"OD",n:1},"Tol."], [
     {group:"3 · Cover"},
-    [{v:3,n:1}, ,{v:f(r.jacketWt*r.lengthFt,1)+" lbs",n:1},{v:"≥0.07",n:1},
+    [{v:3,n:1}, r.jacket,{v:f(r.jacketWt*r.lengthFt,1)+" lbs",n:1},{v:"≥0.07",n:1},
      {v:f4(r.jacketThk),n:1},'±0.01"',{v:f3(r.jacketOD),n:1},'±0.01"'],
-    [{v:"",n:1}, ,{v:f(r.colorWt*r.lengthFt,1)+" lbs",n:1},{v:"",n:1},
+    [{v:"",n:1}, r.colorMB,{v:f(r.colorWt*r.lengthFt,1)+" lbs",n:1},{v:"",n:1},
      {v:"",n:1},"",{v:"",n:1},""]
   ]);
   const minD = r.jacketOD ? reelHub / r.jacketOD : 0;
@@ -400,26 +417,26 @@ function sheetMDS2(r) {
                     {t:"ID (in) ±0.01",n:1},{t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], [
     [{v:1,n:1},esc(r.base[0].name)+" | ≥0.025",{v:f3(r.skinThk),n:1},{v:f3(r.base[0].od),n:1},
      {v:f3(r.base[0].id),n:1},{v:f4(r.base[0].wt),n:1},{v:f0(Math.ceil(r.base[0].wt*r.lengthFt)),n:1}],
-    [{v:"",n:1}, ,{v:f3(r.bondThk),n:1},{v:f3(r.base[1].od),n:1},
+    [{v:"",n:1}, r.base[1].name,{v:f3(r.bondThk),n:1},{v:f3(r.base[1].od),n:1},
      {v:f3(r.base[1].id),n:1},{v:f4(r.base[1].wt),n:1},{v:f0(Math.ceil(r.base[1].wt*r.lengthFt)),n:1}],
-    [{v:"",n:1}, ,{v:f3(r.backerThk),n:1},{v:f3(r.base[2].od),n:1},
+    [{v:"",n:1}, r.base[2].name,{v:f3(r.backerThk),n:1},{v:f3(r.base[2].od),n:1},
      {v:f3(r.base[2].id),n:1},{v:f4(r.base[2].wt),n:1},{v:f0(Math.ceil(r.base[2].wt*r.lengthFt)),n:1}],
     {cls:"tot",cells:[{v:"",n:1},"Base total",{v:f3(r.specWT),n:1},{v:f3(r.baseOD),n:1},{v:"",n:1},
       {v:f4(r.baseWt),n:1},{v:f0(Math.ceil(r.baseWt*r.lengthFt)),n:1}]}
   ]);
-  const rows = [[{v:2,n:1}, ,{v:f0(r.longsQty),n:1},{v:"",n:1},{v:"",n:1},
+  const rows = [[{v:2,n:1}, r.longsName,{v:f0(r.longsQty),n:1},{v:"",n:1},{v:"",n:1},
                  {v:f4(r.longsWt),n:1},{v:f0(Math.ceil(r.longsWt*r.lengthFt)),n:1}],
-                [{v:"",n:1}, ,{v:"Pass #1",n:1},{v:f(r.pitch),n:1},{v:f3(r.A56),n:1},
+                [{v:"",n:1}, r.xbraid,{v:"Pass #1",n:1},{v:f(r.pitch),n:1},{v:f3(r.A56),n:1},
                  {v:f4(r.xWt),n:1},{v:f0(Math.ceil(r.xWt*r.lengthFt)),n:1}]];
-  if (r.passes>=2) rows.push([{v:"",n:1}, ,{v:"Pass #2",n:1},{v:f(r.pitch2),n:1},{v:f3(r.A57),n:1},{v:"",n:1},{v:"",n:1}]);
-  if (r.passes>=3) rows.push([{v:"",n:1}, ,{v:"Pass #3",n:1},{v:f(r.pitch3),n:1},{v:f3(r.A58),n:1},{v:"",n:1},{v:"",n:1}]);
+  if (r.passes>=2) rows.push([{v:"",n:1}, r.xbraid,{v:"Pass #2",n:1},{v:f(r.pitch2),n:1},{v:f3(r.A57),n:1},{v:"",n:1},{v:"",n:1}]);
+  if (r.passes>=3) rows.push([{v:"",n:1}, r.xbraid,{v:"Pass #3",n:1},{v:f(r.pitch3),n:1},{v:f3(r.A58),n:1},{v:"",n:1},{v:"",n:1}]);
   const braid = tbl(["#","Braid",{t:"Number / Pass",n:1},{t:"Pitch (in) ±0.01",n:1},
                      {t:"OD (in) ±0.01",n:1},{t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], rows);
   const cover = tbl(["#","Cover",{t:"Wall (in)",n:1},{t:"OD (in) ±0.01",n:1},{t:"ID (in) ±0.01",n:1},
                      {t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], [
-    [{v:3,n:1}, ,{v:f4(r.jacketThk),n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.jacketID),n:1},
+    [{v:3,n:1}, r.jacket,{v:f4(r.jacketThk),n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.jacketID),n:1},
      {v:f4(r.jacketWt),n:1},{v:f0(Math.ceil(r.jacketWt*r.lengthFt)),n:1}],
-    [{v:"",n:1}, ,{v:"",n:1},{v:"",n:1},{v:"",n:1},
+    [{v:"",n:1}, r.colorMB,{v:"",n:1},{v:"",n:1},{v:"",n:1},
      {v:f4(r.colorWt),n:1},{v:f0(Math.ceil(r.colorWt*r.lengthFt)),n:1}],
     {cls:"tot",cells:[{v:"",n:1},"Finished product",{v:"",n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.linerID),n:1},
       {v:f3(r.weightPerFt),n:1},{v:f0(Math.ceil(r.weightPerFt*r.lengthFt)),n:1}]}
@@ -503,7 +520,7 @@ function sheetMaterials(r) {
       return { cls: used ? "tot" : "", cells:[
         k, {v:f(m.sg),n:1},
         {v: p === undefined ? '<span class="bad">no price</span>' : money(p,3), n:1, raw: p === undefined},
-        {v:m.comp?f0(m.comp):"—",n:1}, , esc(m.alt||"—"),
+        {v:m.comp?f0(m.comp):"—",n:1}, m.acr||"—", m.alt||"—",
         {v:used?'<span class="ok">● used</span>':"",raw:true}]};
     }));
   const br = tbl(["Braid","Type",{t:"lbs/ft per end",n:1},{t:"Width (in)",n:1},
@@ -511,7 +528,7 @@ function sheetMaterials(r) {
     Object.keys(BRAID).map(k => {
       const b = BRAID[k], p = PB[k];
       const used = [r.xbraid,r.longsName,(r.is24T?r.tBraid:null)].includes(k);
-      return { cls: used ? "tot":"", cells:[, , {v:f(b.wt,5),n:1}, {v:f(b.w),n:1},
+      return { cls: used ? "tot":"", cells:[k, b.type, {v:f(b.wt,5),n:1}, {v:f(b.w),n:1},
         {v:f0(b.str),n:1},
         {v: p === undefined ? '<span class="bad">no price</span>' : money(p), n:1, raw: p === undefined},
         {v:f4(b.od),n:1},
@@ -521,7 +538,7 @@ function sheetMaterials(r) {
                   {t:"OD post swage",n:1},{t:"Insert ID",n:1},{t:"Max psi",n:1},"In this design"],
     Object.keys(COUPLING_BY_NAME).map(k => {
       const c = COUPLING_BY_NAME[k], used = k === r.couplingName;
-      return { cls: used ? "tot":"", cells:[, {v:f(c.insert),n:1}, {v:f3(c.stem),n:1}, {v:f0(c.ribs),n:1},
+      return { cls: used ? "tot":"", cells:[k, {v:f(c.insert),n:1}, {v:f3(c.stem),n:1}, {v:f0(c.ribs),n:1},
         {v:f3(c.odPost),n:1}, {v:f3(c.idIns),n:1}, {v:f0(c.maxP),n:1},
         {v:used?'<span class="ok">● selected</span>':"",raw:true}]};
     }));
@@ -542,9 +559,9 @@ function sheetMaterials(r) {
   ]);
   const pipeT = tbl(["Nominal","Jacket OD","ID","Liner ID","Spec WT","Skin","Bond","Backer","Label","Selected"],
     PIPE_ORDER.map(k => { const p = PIPE[k], used = k === r.sizeKey;
-      return { cls:used?"tot":"", cells:[, {v:p.O===null?"—":f3(p.O),n:1}, {v:p.P===null?"—":f3(p.P),n:1},
+      return { cls:used?"tot":"", cells:[k, {v:p.O===null?"—":f3(p.O),n:1}, {v:p.P===null?"—":f3(p.P),n:1},
         {v:f3(p.Q),n:1}, {v:p.R===null?"—":f4(p.R),n:1}, {v:p.V===null?"—":f3(p.V),n:1},
-        {v:p.W===null?"—":f3(p.W),n:1}, {v:p.X===null?"—":f4(p.X),n:1}, ,
+        {v:p.W===null?"—":f3(p.W),n:1}, {v:p.X===null?"—":f4(p.X),n:1}, p.U||"—",
         {v:used?'<span class="ok">●</span>':"",raw:true}]};
     }));
   return `<h4>Polymer price book &mdash; ${esc(BOOK ? BOOK.name : "none loaded")}</h4>${live}
@@ -559,7 +576,7 @@ function sheetMaterials(r) {
 }
 
 function sheetTrace(r) {
-  const row = (cell, label, val) => [{v:cell,cls:"ref"}, , {v:val,n:1}];
+  const row = (cell, label, val) => [{v:cell,cls:"ref"}, label, {v:val,n:1}];
   const t = (title, rows) => `<h4>${title}</h4>` + tbl(["Cell","Quantity",{t:"Value",n:1}], rows);
   return [
     t("Material selection — Inputs!A35:A43", [
@@ -1045,6 +1062,14 @@ document.addEventListener("input", e => {
   const k = e.target.dataset.k, sk = e.target.dataset.sk;
   if (k) {
     I[k] = (e.target.type === "number" || NUMERIC_I.has(k)) ? readNum(e.target, I[k]) : e.target.value;
+
+    /* Changing the duty invalidates the braid, so re-solve it. Changing the
+       braid itself does not, which is what keeps manual edits sticking. */
+    if (AUTO_CFG && DUTY_KEYS.includes(k)) {
+      runOptimise(false);
+      recalc({ rebuild: true });
+      return;
+    }
     recalc();
   } else if (sk) {
     S[sk] = (sk === "sizeKey") ? e.target.value : readNum(e.target, S[sk]);
@@ -1104,7 +1129,7 @@ async function refreshDesignList() {
     if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">No saved designs yet.</p>`; return; }
     host.innerHTML = tbl(["Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
       rows.map(d => [
-        d.name, ,
+        d.name, d.client || "—",
         {v: d.summary?.costPerFt != null ? money(d.summary.costPerFt) : "—", n:1},
         {v: d.summary?.weightPerFt != null ? f3(d.summary.weightPerFt) : "—", n:1},
         {v: d.summary?.burst != null ? f0(d.summary.burst) + " psi" : "—", n:1},
@@ -1121,15 +1146,18 @@ async function openDesign(id) {
   if (d.price_book_id && (!BOOK || d.price_book_id !== BOOK.id)) {
     try { await useBook(d.price_book_id); } catch (_) {}
   }
+  // Set the client before the rebuild, so the Designer's own Client Name
+  // field shows it too — the two are one value, not two.
+  if (d.client) I.client = d.client;
   recalc({ rebuild: true });
   document.getElementById("designName").value = d.name;
-  document.getElementById("designClient").value = d.client || "";
+  document.getElementById("designClient").value = I.client || "";
   setStatus(`Opened "${d.name}".`);
 }
 
 async function doSave() {
   const name   = document.getElementById("designName").value.trim();
-  const client = document.getElementById("designClient").value.trim();
+  const client = document.getElementById("designClient").value.trim() || I.client;
   if (!name) { setStatus("Give the design a name first.", true); return; }
   const summary = {
     costPerFt: R.costPerFt, weightPerFt: R.weightPerFt, burst: R.burstTotal,
@@ -1177,7 +1205,7 @@ document.getElementById("saveBtn").addEventListener("click", doSave);
 document.getElementById("newBtn").addEventListener("click", () => {
   CURRENT_DESIGN = null;
   document.getElementById("designName").value = "";
-  document.getElementById("designClient").value = "";
+  document.getElementById("designClient").value = I.client;
   setStatus("Started a new design. Saving will create a new record.");
 });
 
@@ -1268,3 +1296,51 @@ for (const id of ["signoutBtn", "pendingSignout"]) {
 }
 
 boot();
+
+/* =====================================================================
+   Braid auto-configuration.
+
+   The duty (size, pressure, temperature, service) fixes what the pipe has
+   to survive; the braid and longs are then the cheapest arrangement that
+   survives it. Re-solving on a duty change saves hand-tuning, but the
+   result is written straight into the ordinary inputs, so every choice
+   stays editable afterwards.
+   ===================================================================== */
+const DUTY_KEYS = ["sizeKey", "psi", "degF", "sour", "service", "years", "app"];
+
+function runOptimise(announce) {
+  const base = { ...I };
+  DUTY_KEYS.forEach(() => {});                 // duty comes from I as-is
+  const res = optimise(base, PRICES);
+  if (res.best) {
+    Object.assign(I, {
+      xbraid:  res.best.inputs.xbraid,
+      pitch:   res.best.inputs.pitch,
+      passes:  res.best.inputs.passes,
+      longs:   res.best.inputs.longs,
+      longsQty:res.best.inputs.longsQty
+    });
+    const w = res.best.warnings.length ? ` — ${res.best.warnings.join("; ")}` : "";
+    OPT_NOTE = `Cheapest that passes: ${money(res.best.costPerFt)}/ft, `
+             + `${f0(res.best.burst)} psi burst${w}. ${res.tried.length} options, ${res.elapsedMs} ms.`;
+  } else if (res.nearest) {
+    OPT_NOTE = `No configuration passes. Closest is ${res.nearest.inputs.xbraid}, `
+             + `${res.nearest.inputs.longsQty} longs — ${res.nearest.blockers.join("; ")}.`;
+  } else {
+    OPT_NOTE = "No configuration found for this duty.";
+  }
+  if (announce) setStatus(res.best ? "Braid configured." : "Nothing passes for this duty.", !res.best);
+  return res;
+}
+
+document.addEventListener("change", e => {
+  if (e.target.id !== "autoCfg") return;
+  AUTO_CFG = e.target.checked;
+  if (AUTO_CFG) { runOptimise(false); recalc({ rebuild: true }); }
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("#optBtn")) return;
+  e.preventDefault();
+  runOptimise(true);
+  recalc({ rebuild: true });
+});
