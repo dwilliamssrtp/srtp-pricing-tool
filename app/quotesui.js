@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261009-1536";
-import { solve } from "./engine.js?v=20261009-1536";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1536";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1536";
+import * as DB from "./db.js?v=20261009-1546";
+import { solve } from "./engine.js?v=20261009-1546";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1546";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1546";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -179,7 +179,39 @@ function newQuoteForm() {
       <input id="nqNewCustomer" placeholder="or a new customer name" style="flex:1 1 180px">
       <button class="pri" id="nqCreate">Create</button>
       <span id="qStatus"></span>
-    </div>`;
+    </div>`
+  + designsPanel();
+}
+
+/* Saved designs, on the Quotes landing page.
+
+   Without this the designs are invisible here: the picker only exists inside
+   an open quote, so someone who has just saved a design arrives at the quote
+   list and reasonably concludes it did not save. Each row can start a quote
+   straight from the design. */
+function designsPanel() {
+  const { tbl, esc, money, f0 } = H;
+  if (!DESIGNS.length) {
+    return `<h4>Saved designs</h4>
+      <p class="ref">None yet. Build one on the Designer page and save it; it will appear here
+      ready to quote.</p>`;
+  }
+  const rows = DESIGNS.map(d => {
+    const s = d.summary || {};
+    return { cells: [
+      d.name,
+      d.client || "—",
+      s.sizeKey ? `${s.sizeKey}" · ${f0(s.psi)} psi · ${f0(s.degF)}°F` : "—",
+      { v: s.costPerFt != null ? money(s.costPerFt) : "—", n:1 },
+      { v: `<input class="qfFt" data-for="${esc(d.id)}" type="number" min="1" step="100"
+             value="1000" title="Feet to quote" style="width:88px;text-align:right">
+             <button data-quotefrom="${esc(d.id)}">Quote this</button>`, raw:true }
+    ]};
+  });
+  return `<h4>Saved designs <span class="ref">(${DESIGNS.length})</span></h4>`
+    + tbl(["Design","Client","Duty",{t:"$/ft",n:1},{t:"Feet to quote",n:1}], rows)
+    + `<p class="ref">&ldquo;Quote this&rdquo; starts a quote from the design, or adds it to the
+       quote you have open. You will be asked for the footage.</p>`;
 }
 
 /* ------------------------------------------------------------- editor */
@@ -234,6 +266,21 @@ function editorPage() {
   if (T.missingCost.length)
     warn.push(`<li>No cost found for: ${esc(T.missingCost.join("; "))}.
       Those lines are excluded from the budget, so margin is overstated.</li>`);
+  /* The workbook's flange table (Team Questions H9:Q21) covers 6, 5, 4.5, 4,
+     3.5, 3, 2.375 and 1.75 only. A pipe outside that list gets no end flange,
+     lap or splice, which would otherwise look like a complete quote that
+     happens to be cheap. Say so instead. */
+  for (const g of T.groups) {
+    const pipe = g.rows.find(x => x.kind === "pipe");
+    if (pipe && !g.rows.some(x => x.kind === "end_flange")) {
+      const d = DESIGNS.find(x => x.id === pipe.design_id);
+      const sz = d && d.summary ? d.summary.sizeKey : "this size";
+      warn.push(`<li><b>No connections on group ${g.groupNo}.</b> The flange table carries
+        6, 5, 4.5, 4, 3.5, 3, 2.375 and 1.75 in only, so <b>${esc(String(sz))}</b> has no end
+        flange, lap flange or splice. Add them by hand, or quote a tabulated size.</li>`);
+    }
+  }
+
   for (const l of q.lines) {
     const h = HISTORY[l.product_key];
     if (l.kind === "pipe" && h && h.differs)
@@ -417,7 +464,8 @@ document.addEventListener("click", async e => {
   if (!H) return;
   const t = id => e.target.closest(id);
   const openq = t("[data-openq]"), arch = t("[data-arch]"), unarch = t("[data-unarch]"),
-        delq = t("[data-delq]"), addg = t("[data-addgroup]"), rmg = t("[data-rmg]");
+        delq = t("[data-delq]"), addg = t("[data-addgroup]"), rmg = t("[data-rmg]"),
+        qfrom = t("[data-quotefrom]");
 
   try {
     if (openq) { await openQuote(openq.dataset.openq); return; }
@@ -454,6 +502,47 @@ document.addEventListener("click", async e => {
     if (rmg) {
       CUR.lines = CUR.lines.filter(l => String(l.group_no) !== String(rmg.dataset.rmg));
       H.refresh(); status("Group removed — Save to keep it."); return;
+    }
+
+    /* Start a quote straight from a saved design on the Quotes landing page.
+       Reuses the same group builder as the in-quote picker. */
+    if (qfrom) {
+      const design = await DB.loadDesign(qfrom.dataset.quotefrom);
+      const box = document.querySelector(`.qfFt[data-for="${qfrom.dataset.quotefrom}"]`);
+      const ft  = Number(box && box.value);
+      if (!ft) { status("Enter the footage for this design first.", true); return; }
+
+      if (!CUR) {
+        let customerId = null;
+        if (design.client) {
+          const existing = CUSTOMERS.find(c =>
+            c.name.toLowerCase() === String(design.client).toLowerCase());
+          customerId = existing ? existing.id : (await DB.addCustomer(design.client)).id;
+          CUSTOMERS = await DB.listCustomers();
+        }
+        if (!customerId) { status("Give the design a client first, or create the quote manually.", true); return; }
+        const s = quoteSettings(null);
+        const q = await DB.createQuote({
+          title: `${design.client} — ${design.name}`, customer_id: customerId,
+          price_book_id: H.bookId(), scrap_pct: s.scrapPct, markup: s.markup,
+          day_cost: s.dayCost, hours_per_day: s.hoursPerDay, days_buffer: s.daysBuffer
+        });
+        await loadList();
+        await openQuote(q.id);
+      }
+
+      const groupNo = (CUR.lines.reduce((m, l) => Math.max(m, l.group_no || 1), 0) || 0) + 1;
+      const built = groupFromDesign(design, {
+        groupNo, suppliedFt: ft,
+        connectionMaterial: CONNECTION_MATERIALS[0].name, sealing: "RF",
+        markup: quoteSettings(CUR).markup
+      });
+      CUR.lines = CUR.lines.concat(built.lines);
+      VIEW = "editor";
+      await refreshHistory();
+      H.refresh();
+      status(`Added ${design.name}: ${built.reels} reel(s) at ${H.f0(built.capacity)} ft. Save to keep it.`);
+      return;
     }
 
     if (addg) {

@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261009-1536";
-import { solve } from "./engine.js?v=20261009-1536";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261009-1546";
+import { solve } from "./engine.js?v=20261009-1546";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -93,19 +93,26 @@ function bestPitch(base, xbraid, passes, prices) {
    `base` is the input object without braid choices; everything else on
    it (size, pressure, temperature, service, length) is taken as given.
    --------------------------------------------------------------------- */
+/* The optimiser never reaches for 15-2 braid: only 15-1 and 15-3 are stocked
+   for it to choose from. 15-2 stays selectable by hand in the Designer, so a
+   deliberate choice is still possible — it just will not be proposed. */
+const OPTIMISER_SKIPS = /15-2/;
+export const optimiserBraids = () => XBRAIDS.filter(b => !OPTIMISER_SKIPS.test(b));
+export const optimiserLongs  = () => LONGS.filter(b => !OPTIMISER_SKIPS.test(b));
+
 export function optimise(base, prices, opts = {}) {
   const t0 = performance.now();
   const maxPasses = opts.maxPasses ?? 3;
   let considered = 0, best = null, nearest = null;
   const tried = [];
 
-  for (const xbraid of XBRAIDS) {
+  for (const xbraid of optimiserBraids()) {
     for (let passes = 1; passes <= maxPasses; passes++) {
       const hit = bestPitch(base, xbraid, passes, prices);
       considered++;
       if (!hit) continue;
 
-      for (const longsName of LONGS) {
+      for (const longsName of optimiserLongs()) {
         const lp = minLongs({ ...base, xbraid, pitch: hit.pitch, passes }, longsName, prices);
         considered++;
         if (!lp) continue;                                  // no such longs

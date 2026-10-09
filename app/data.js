@@ -217,3 +217,8 @@ export {
   API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, SPOOL_REF, SPOOL_STRAIN, LPG_CODES
 };
+
+/* Inputs!AG2:AG45 — longs are fitted in four equal quadrants (Inputs!A114),
+   so the quantity steps in fours. The workbook offers this as a ladder, not
+   a free number, which is why the input is a dropdown here too. */
+export const LONGS_LADDER = (() => { const a=[]; for (let q=4; q<=200; q+=4) a.push(q); return a; })();

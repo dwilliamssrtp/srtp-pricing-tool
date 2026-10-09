@@ -4,14 +4,14 @@
 import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
-  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
-} from "./data.js?v=20261009-1536";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1536";
-import * as DB from "./db.js?v=20261009-1536";
-import { initPages } from "./pages.js?v=20261009-1536";
-import * as PARTSUI from "./partsui.js?v=20261009-1536";
-import * as QUOTESUI from "./quotesui.js?v=20261009-1536";
-import { optimise } from "./optimise.js?v=20261009-1536";
+  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER
+} from "./data.js?v=20261009-1546";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1546";
+import * as DB from "./db.js?v=20261009-1546";
+import { initPages } from "./pages.js?v=20261009-1546";
+import * as PARTSUI from "./partsui.js?v=20261009-1546";
+import * as QUOTESUI from "./quotesui.js?v=20261009-1546";
+import { optimise } from "./optimise.js?v=20261009-1546";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -23,7 +23,7 @@ let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261009-1536";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261009-1546";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -167,7 +167,7 @@ function renderInputs() {
     derived("Minimum pitch (braid width × 12)","d_minPitch", f(r.minPitch), "in"),
     field("Number of Passes","passes","select",{opts:[1,2,3]}),
     field("Longs (longitudinal)","longs","select",{opts:LONGS}),
-    field("Longs Qty / Reel","longsQty","num",{min:1,unit:"ea"}),
+    field("Longs Qty / Reel","longsQty","select",{opts:LONGS_LADDER,unit:"ea"}),
     derived("Max longs that fit","d_maxLongs", f0(r.maxLongs), "ea"),
     derived("Longs prediction (Inputs!B52)","d_longsPred", f(r.longsPrediction,1), "ea"),
 
