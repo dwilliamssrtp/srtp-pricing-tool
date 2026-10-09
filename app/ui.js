@@ -5,13 +5,13 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
-} from "./data.js?v=20261009-1530";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1530";
-import * as DB from "./db.js?v=20261009-1530";
-import { initPages } from "./pages.js?v=20261009-1530";
-import * as PARTSUI from "./partsui.js?v=20261009-1530";
-import * as QUOTESUI from "./quotesui.js?v=20261009-1530";
-import { optimise } from "./optimise.js?v=20261009-1530";
+} from "./data.js?v=20261009-1536";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1536";
+import * as DB from "./db.js?v=20261009-1536";
+import { initPages } from "./pages.js?v=20261009-1536";
+import * as PARTSUI from "./partsui.js?v=20261009-1536";
+import * as QUOTESUI from "./quotesui.js?v=20261009-1536";
+import { optimise } from "./optimise.js?v=20261009-1536";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -23,7 +23,7 @@ let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261009-1530";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261009-1536";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))

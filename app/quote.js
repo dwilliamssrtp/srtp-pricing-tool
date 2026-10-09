@@ -15,7 +15,7 @@
    not 50%. That is the workbook's intent, not a rounding error.
    ===================================================================== */
 
-import { labourDays } from "./parts.js?v=20261009-1530";
+import { labourDays } from "./parts.js?v=20261009-1536";
 
 const n = v => (v === null || v === undefined || Number.isNaN(Number(v)) ? 0 : Number(v));
 

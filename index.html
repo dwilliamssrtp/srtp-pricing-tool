@@ -28,6 +28,11 @@
   }
 }
 *{box-sizing:border-box}
+/* A custom display on an id or class out-specifies the browser's own
+   [hidden]{display:none}, so hiding such an element silently does nothing.
+   #gate{display:grid} hit exactly that: the sign-in panel stayed a full
+   viewport tall above the app and had to be scrolled past every load. */
+[hidden]{display:none!important}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
 .wrap{max-width:1500px;margin:0 auto;padding:0 16px 40px}
@@ -46,7 +51,6 @@ header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 8
   padding:6px 16px;font-size:13px;font-weight:600}
 .pagenav button:hover{color:var(--ink);background:var(--card)}
 .pagenav button[aria-selected="true"]{background:var(--accent);color:#17120c}
-.page[hidden]{display:none}
 .hdkpi{display:flex;gap:10px;flex-wrap:wrap}
 .hdkpi div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 11px;line-height:1.25}
 .hdkpi em{display:block;font-style:normal;font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em}
@@ -335,6 +339,6 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261009-1530"></script>
+<script type="module" src="app/ui.js?v=20261009-1536"></script>
 </body>
 </html>
