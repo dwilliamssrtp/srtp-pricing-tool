@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SRTP Pricing Tool</title>
+<style>
+:root{
+  --bg:#0f1318; --bg2:#151b22; --card:#1a222b; --card2:#202a35;
+  --line:#2b3744; --line2:#3a4855;
+  --ink:#e8edf2; --ink2:#a3b1be; --ink3:#6f7f8d;
+  --accent:#ff8a3d; --accent2:#4aa8ff; --ok:#3ddc97; --warn:#ffcc4d; --bad:#ff5d5d;
+  --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
+  --sans:"Segoe UI",Inter,system-ui,-apple-system,sans-serif;
+}
+:root[data-theme="light"]{
+  --bg:#eef1f4; --bg2:#e4e9ee; --card:#ffffff; --card2:#f5f7f9;
+  --line:#d4dbe2; --line2:#bcc7d1;
+  --ink:#16202a; --ink2:#4d5e6e; --ink3:#7b8b99;
+  --accent:#d2690f; --accent2:#1668c4; --ok:#0f8a5f; --warn:#9a6b00; --bad:#c2281f;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#eef1f4; --bg2:#e4e9ee; --card:#ffffff; --card2:#f5f7f9;
+    --line:#d4dbe2; --line2:#bcc7d1;
+    --ink:#16202a; --ink2:#4d5e6e; --ink3:#7b8b99;
+    --accent:#d2690f; --accent2:#1668c4; --ok:#0f8a5f; --warn:#9a6b00; --bad:#c2281f;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1500px;margin:0 auto;padding:0 16px 80px}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.hd{max-width:1500px;margin:0 auto;padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;gap:1px;margin-right:auto}
+.brand b{font-size:16px;letter-spacing:.2px}
+.brand span{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.14em}
+.hdkpi{display:flex;gap:10px;flex-wrap:wrap}
+.hdkpi div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 11px;line-height:1.25}
+.hdkpi em{display:block;font-style:normal;font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em}
+.hdkpi b{font-family:var(--mono);font-size:15px;color:var(--accent)}
+button,select,input{font:inherit;color:var(--ink);background:var(--card2);border:1px solid var(--line2);
+  border-radius:6px;padding:5px 8px}
+button{cursor:pointer;background:var(--card2)}
+button:hover{border-color:var(--accent)}
+button.pri{background:var(--accent);color:#17120c;border-color:var(--accent);font-weight:600}
+:root[data-theme="light"] button.pri,
+@media (prefers-color-scheme: light){button.pri{color:#fff}}
+input:focus,select:focus{outline:2px solid var(--accent2);outline-offset:-1px}
+/* type-only numeric fields: no spinner arrows */
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;appearance:none;margin:0}
+
+/* ---------- layout ---------- */
+h2.sec{font-size:12px;text-transform:uppercase;letter-spacing:.16em;color:var(--ink3);
+  margin:30px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+.top{display:grid;grid-template-columns:minmax(360px,460px) 1fr;gap:16px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card>h3{margin:0;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--ink2);background:var(--card2);border-bottom:1px solid var(--line)}
+.card>h3 small{float:right;font-family:var(--mono);text-transform:none;letter-spacing:0;color:var(--ink3)}
+.pad{padding:12px 14px}
+
+/* ---------- input grid ---------- */
+.ig{display:grid;grid-template-columns:1fr 128px 92px;gap:6px 8px;align-items:center}
+.ig label{font-size:12.5px;color:var(--ink2)}
+.ig input,.ig select{width:100%;font-family:var(--mono);font-size:13px}
+.ig .u{font-family:var(--mono);font-size:11.5px;color:var(--ink3);text-align:left}
+.ig .wide{grid-column:1/-1}
+.ig .derived{font-family:var(--mono);font-size:13px;color:var(--accent2);padding:5px 8px;
+  background:var(--bg2);border:1px dashed var(--line2);border-radius:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp{grid-column:1/-1;margin:10px 0 2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;
+  color:var(--accent);border-top:1px solid var(--line);padding-top:9px}
+.grp:first-child{border-top:0;margin-top:0;padding-top:0}
+
+/* ---------- KPI tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:10px}
+.tile{background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.tile em{display:block;font-style:normal;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}
+.tile b{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.3px}
+.tile s{display:block;text-decoration:none;font-family:var(--mono);font-size:11px;color:var(--ink3);margin-top:2px}
+.tile.big b{font-size:23px;color:var(--accent)}
+.tile.ok b{color:var(--ok)} .tile.bad b{color:var(--bad)}
+.banner{font-family:var(--mono);font-size:13px;padding:9px 12px;border-radius:8px;
+  background:var(--bg2);border:1px solid var(--line);margin-bottom:12px;word-break:break-word}
+
+/* ---------- tables ---------- */
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+th{background:var(--card2);color:var(--ink2);font-weight:600;font-size:11px;
+  text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+td.n,th.n{text-align:right;font-family:var(--mono);white-space:nowrap}
+tr.grp2 td{background:var(--card2);font-weight:700;color:var(--accent);font-size:11px;
+  text-transform:uppercase;letter-spacing:.1em}
+tr.tot td{background:var(--bg2);font-weight:700}
+td.k{color:var(--ink2);width:1%;white-space:nowrap}
+.cell{font-family:var(--mono)}
+.ok{color:var(--ok);font-weight:600} .bad{color:var(--bad);font-weight:600} .wn{color:var(--warn);font-weight:600}
+.scroll{overflow:auto;max-height:520px}
+.tw{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.top>*,.two>*,.three>*,.card,.pad,.panel>*{min-width:0}
+.muted{color:var(--ink3)}
+.ref{font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:0}
+.tabs button{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;
+  background:var(--bg2);color:var(--ink2);padding:7px 14px;font-size:12.5px;position:relative;top:1px}
+.tabs button[aria-selected="true"]{background:var(--card);color:var(--ink);
+  border-color:var(--line);box-shadow:inset 0 2px 0 var(--accent)}
+.panel{background:var(--card);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:16px}
+.panel h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent)}
+.panel h4:not(:first-child){margin-top:22px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.three{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;align-items:start}
+
+/* ---------- warnings ---------- */
+.warns{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.warns li{background:color-mix(in srgb,var(--warn) 12%,var(--card));border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));
+  border-left:3px solid var(--warn);border-radius:6px;padding:7px 11px;font-size:12.5px}
+.clean{color:var(--ok);font-size:12.5px;margin-top:14px}
+
+/* ---------- spool section ---------- */
+#spool{margin-top:46px;border:2px solid var(--accent2);border-radius:14px;
+  background:color-mix(in srgb,var(--accent2) 6%,var(--bg2));padding:4px}
+#spool .inner{background:var(--bg);border-radius:11px;padding:18px}
+#spool h2.sec{margin-top:0;color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 40%,var(--line))}
+.tag{display:inline-block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--accent2);color:#06101c;border-radius:4px;padding:2px 7px;font-weight:700;vertical-align:2px;margin-left:8px}
+
+@media (max-width:980px){
+  .top{grid-template-columns:1fr}
+  .two,.three{grid-template-columns:1fr}
+  .ig{grid-template-columns:1fr 110px 70px}
+}
+@media print{
+  header{position:static} button,.tabs{display:none}
+  .panel{display:block!important;border-radius:10px;border-top:1px solid var(--line);page-break-inside:avoid;margin-bottom:14px}
+  body{background:#fff;color:#000}
+}
+
+/* ---------- sign-in gate ---------- */
+#gate{min-height:100dvh;display:grid;place-items:center;padding:24px}
+.gatecard{width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:26px 24px}
+.gatecard h1{margin:0 0 4px;font-size:19px;letter-spacing:.2px}
+.gatecard p.sub{margin:0 0 20px;color:var(--ink3);font-size:11px;
+  text-transform:uppercase;letter-spacing:.14em}
+.gatecard label{display:block;font-size:12px;color:var(--ink2);margin:12px 0 4px}
+.gatecard input{width:100%;font-family:var(--mono)}
+.gatecard button{width:100%;margin-top:18px;padding:9px}
+#signinMsg{display:block;margin-top:12px;font-size:12.5px;min-height:1.2em}
+.hdright{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#whoami{font-size:11.5px;color:var(--ink3);font-family:var(--mono)}
+.savebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.savebar input{font-family:var(--mono);font-size:13px}
+#saveStatus{font-size:12.5px}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="gatecard">
+    <h1>SRTP Pricing Tool</h1>
+    <p class="sub">Specialty RTP &middot; internal</p>
+
+    <form id="signinForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button class="pri" id="signinBtn" type="submit">Sign in</button>
+      <span id="signinMsg" class="muted"></span>
+    </form>
+
+    <div id="pendingBox" hidden>
+      <p style="font-size:13.5px;line-height:1.5">Your account exists but has not been
+        activated yet. An administrator needs to switch it on before you can see
+        designs or prices.</p>
+      <button id="pendingSignout">Sign out</button>
+    </div>
+  </div>
+</div>
+
+<div id="app" hidden>
+</head>
+<body>
+
+<header>
+  <div class="hd">
+    <div class="brand"><b>SRTP Pricing Tool</b><span>v7 &middot; live design &amp; cost engine</span></div>
+    <div class="hdkpi" id="hdkpi"></div>
+    <select id="priceBasis" title="Which price book drives the cost build-up"></select>
+    <button id="themeBtn" title="Toggle light / dark">&#9681;</button>
+    <button onclick="window.print()">Print</button>
+    <button class="pri" id="resetBtn">Reset</button>
+    <span id="whoami"></span>
+    <button id="signoutBtn">Sign out</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2 class="sec">1 &nbsp;Input section</h2>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Saved designs <small>Supabase &middot; public.designs</small></h3>
+    <div class="pad">
+      <div class="savebar">
+        <input id="designName" type="text" placeholder="Design name" style="flex:1 1 220px">
+        <input id="designClient" type="text" placeholder="Client (optional)" style="flex:1 1 160px">
+        <button class="pri" id="saveBtn">Save</button>
+        <button id="newBtn">New</button>
+        <span id="saveStatus"></span>
+      </div>
+      <div id="designList"></div>
+    </div>
+  </div>
+
+  <div class="top">
+
+    <div class="card">
+      <h3>Project &amp; Design Inputs <small>Inputs!A1:C17</small></h3>
+      <div class="pad">
+        <div class="ig" id="inputGrid"></div>
+      </div>
+    </div>
+
+    <div style="display:grid;gap:16px">
+      <div class="card">
+        <h3>Headline <small>Inputs!F4:H6</small></h3>
+        <div class="pad">
+          <div class="banner" id="prodName"></div>
+          <div class="tiles" id="headTiles"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Design verification <small>Inputs!A20:G21 &middot; AW5:AX14</small></h3>
+        <div class="pad"><div class="tiles" id="dispTiles"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec">2 &nbsp;Design display</h2>
+  <div class="card">
+    <h3>Design checks &amp; cost build-up <small>Inputs!A20:G21 &middot; AS5:AV14</small></h3>
+    <div class="pad">
+      <div class="two">
+        <div>
+          <h4 style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent)">Design checks</h4>
+          <div id="checksTbl"></div>
+        </div>
+        <div>
+          <h4 style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent)">Cost build-up by layer</h4>
+          <div id="costTbl"></div>
+        </div>
+      </div>
+      <ul class="warns" id="warns"></ul>
+    </div>
+  </div>
+
+  <h2 class="sec">3 &nbsp;Linked datasheets &mdash; every value below is driven by the input section</h2>
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <div class="panel" id="panel"></div>
+
+  <div id="spool">
+    <div class="inner">
+      <h2 class="sec">Spool Calculator <span class="tag">standalone &mdash; not linked to the design above</span></h2>
+      <div class="top">
+        <div class="card">
+          <h3>Spool inputs <small>Spool Calculator!B2:E10</small></h3>
+          <div class="pad"><div class="ig" id="spoolGrid"></div></div>
+        </div>
+        <div class="card">
+          <h3>Spool result <small>Spool Calculator!D17:F20</small></h3>
+          <div class="pad">
+            <div class="tiles" id="spoolTiles"></div>
+            <ul class="warns" id="spoolWarns"></ul>
+          </div>
+        </div>
+      </div>
+      <div class="two" style="margin-top:16px">
+        <div class="card"><h3>Wrap build-up <small>K6:M50</small></h3><div class="scroll" id="spoolWraps"></div></div>
+        <div>
+          <div class="card"><h3>Shipped reel reference <small>B23:G29</small></h3><div id="spoolRef"></div></div>
+          <div class="card" style="margin-top:16px"><h3>Pressure &amp; strain reference <small>AD6:AH12</small></h3><div id="spoolStrain"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="ref" style="margin-top:34px">
+    Transcribed from <b>Pricing Tool - v7.xlsx</b>. Every figure carries its source cell. Hidden legacy sheets
+    (Revisions, Costing, Base Tube Gathering Line, Actual Base Tube OD, Cover Line, Reels) are not wired in &mdash;
+    no visible sheet reads them.
+  </p>
+</div>
+
+</div>
+
+<script type="module" src="app/ui.js"></script>
+</body>
+</html>

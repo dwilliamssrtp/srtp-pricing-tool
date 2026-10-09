@@ -1,0 +1,12 @@
+# Legacy single-file v7 build lives outside this repo because it still has
+# prices baked into its source. Belt and braces in case it is copied back in.
+SRTP Pricing Tool v7.html
+srtp-data.js
+srtp-engine.js
+srtp-ui.js
+_shell_head.html
+build.ps1
+*.tmp
+*.part
+.DS_Store
+.claude/
