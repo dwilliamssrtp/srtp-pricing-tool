@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261009-1405";
-import { solve } from "./engine.js?v=20261009-1405";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1405";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1405";
+import * as DB from "./db.js?v=20261009-1414";
+import { solve } from "./engine.js?v=20261009-1414";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1414";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1414";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -210,7 +210,16 @@ function editorPage() {
       { v: `<input class="qln" data-id="${esc(r.id ?? r.sort + "-" + g.groupNo)}"
              data-g="${g.groupNo}" data-s="${r.sort}" data-f="supplied_units" type="number"
              step="1" min="0" value="${r.supplied}" style="width:96px;text-align:right">`, n:1, raw:true },
-      { v: f0(r.manufactured), n:1 },
+      /* Manufactured is typed for parts, where it is a count you decide
+         (spares, breakage, a part you build an extra of). On the pipe line it
+         stays derived as supplied x (1 + scrap), so it is shown read-only. */
+      r.kind === "pipe"
+        ? { v: `${f0(r.manufactured)} <span class="ref" title="supplied × (1 + scrap)">auto</span>`,
+            n:1, raw:true }
+        : { v: `<input class="qln" data-g="${g.groupNo}" data-s="${r.sort}"
+               data-f="manufactured_units" type="number" step="1" min="0"
+               value="${r.manufactured}" title="Units built, which may exceed the units supplied"
+               style="width:96px;text-align:right">`, n:1, raw:true },
       { v: `<input class="qln" data-g="${g.groupNo}" data-s="${r.sort}" data-f="unit_price"
              type="number" step="0.01" min="0" value="${r.price ?? ""}"
              placeholder="not set" style="width:96px;text-align:right">`, n:1, raw:true },
@@ -489,10 +498,21 @@ document.addEventListener("change", async e => {
   if (box) {
     const line = lineAt(box.dataset.g, box.dataset.s);
     if (!line) return;
+    const field = box.dataset.f;
     const v = box.value === "" ? null : Number(box.value);
-    line[box.dataset.f] = v;
+    const wasSupplied = Number(line.supplied_units);
+    const wasMade     = line.manufactured_units == null ? null : Number(line.manufactured_units);
+
+    line[field] = v;
+
+    // On a part line, manufactured tracks supplied until you deliberately set
+    // the two apart; after that your figure is left alone.
+    if (field === "supplied_units" && line.kind !== "pipe"
+        && (wasMade === null || wasMade === wasSupplied)) {
+      line.manufactured_units = v;
+    }
     // A typed cost is an override for this quote only.
-    if (box.dataset.f === "unit_cost") {
+    if (field === "unit_cost") {
       line.cost_overridden = true;
       line.cost_is_placeholder = false;
     }
