@@ -5,10 +5,11 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
-} from "./data.js?v=20261009-1247";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1247";
-import * as DB from "./db.js?v=20261009-1247";
-import { initPages } from "./pages.js?v=20261009-1247";
+} from "./data.js?v=20261009-1317";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1317";
+import * as DB from "./db.js?v=20261009-1317";
+import { initPages } from "./pages.js?v=20261009-1317";
+import * as PARTSUI from "./partsui.js?v=20261009-1317";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -18,7 +19,7 @@ let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261009-1247";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261009-1317";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -800,9 +801,11 @@ function sheetPricing() {
   };
 
   return header + KIND_ORDER.map(section).join("") + `
-    <p class="ref" style="margin-top:20px">Couplings and reels are stored here but are not yet
-    consumed by the $/ft engine &mdash; they are for quoting, which is not built. Polymer and braid
-    prices do drive the cost build-up.</p>`;
+    <p class="ref" style="margin-top:20px">Polymer and braid prices drive the $/ft cost build-up.
+    The part costs below feed quoting.</p>`
+    + PARTSUI.partsSection()
+    + PARTSUI.speedsSection()
+    + PARTSUI.settingsSection();
 }
 
 async function reloadSheet() {
@@ -1077,6 +1080,7 @@ async function useBook(bookId) {
   I.priceBookId = BOOK.id;
   await reloadSheet();
   await reloadUsers();
+  await PARTSUI.load(BOOK.id);
   const sel = document.getElementById("priceBasis");
   if (sel) sel.value = BOOK.id;
   if (PAGES) PAGES.refresh();   // keep the pricing page in step with the book
@@ -1191,6 +1195,14 @@ async function enterApp(profile) {
   await useBook(I.priceBookId && BOOKS.some(b => b.id === I.priceBookId) ? I.priceBookId : null);
   renderBookPicker();
   showGate("app");
+
+  // The parts UI borrows this module's formatters so the look stays consistent.
+  PARTSUI.init({
+    tbl, esc, money, f0,
+    isAdmin: () => ME && ME.role === "admin",
+    bookId:  () => BOOK && BOOK.id,
+    refresh: () => { if (PAGES) PAGES.refresh(); }
+  });
 
   PAGES = initPages({ pricingHTML: sheetPricing, usersHTML: sheetUsers });
   PAGES.showUsers(profile.role === "admin");

@@ -1,7 +1,7 @@
 /* =====================================================================
    Supabase client, session handling and data access.
    ===================================================================== */
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261009-1247";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261009-1317";
 
 const { createClient } = await import(SUPABASE_JS);
 
@@ -231,3 +231,53 @@ export const createUser   = (email, password, role, full_name) =>
   adminFn({ action:"create", email, password, role, full_name });
 export const deleteUser   = id => adminFn({ action:"delete", id });
 export const resetPassword = (id, password) => adminFn({ action:"password", id, password });
+
+/* ---------------------------------------------- master cost sheet (parts) */
+export async function loadPartCosts(bookId) {
+  const { data, error } = await sb.from("part_costs")
+    .select("id,kind,rtp_size,flange_size,flange_id,ansi_class,sealing,material,reel_code,label,cost,list_price,unit,notes,sort")
+    .eq("price_book_id", bookId)
+    .order("kind").order("sort").order("label");
+  if (error) throw error;
+  return data || [];
+}
+export async function setPartField(id, patch) {
+  const { error } = await sb.from("part_costs").update(patch).eq("id", id);
+  if (error) throw error;
+}
+export async function addPart(bookId, row) {
+  const { data, error } = await sb.from("part_costs")
+    .insert({ price_book_id: bookId, ...row }).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function removePart(id) {
+  const { error } = await sb.from("part_costs").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/* ------------------------------------------------------------ line speeds */
+export async function loadLineSpeeds(bookId) {
+  const { data, error } = await sb.from("line_speeds")
+    .select("id,rtp_size,stage,ft_per_min,passes,efficiency,braider_mult,sort")
+    .eq("price_book_id", bookId).order("sort");
+  if (error) throw error;
+  return data || [];
+}
+export async function setLineSpeed(id, patch) {
+  const { error } = await sb.from("line_speeds").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+/* --------------------------------------------------------------- settings */
+export async function loadSettings() {
+  const { data, error } = await sb.from("quote_settings")
+    .select("key,value,label,unit,notes").order("key");
+  if (error) throw error;
+  return data || [];
+}
+export async function setSetting(key, value) {
+  const { error } = await sb.from("quote_settings")
+    .update({ value: value === "" || value === null ? null : Number(value) }).eq("key", key);
+  if (error) throw error;
+}

@@ -252,3 +252,64 @@ create policy profiles_update_self on public.profiles
     and role      = private.my_role()
     and is_active = private.my_is_active()
   );
+
+-- ================================ 2026-10-09 — quoting data layer =========
+-- Master cost sheet for bought-in parts. The Endeco workbook had the right
+-- shape on its Cost Sheet (Zinc Chromate / PPS / Duplex 2205 x RF / RTJ /
+-- Midline, by size) but every price cell was blank, so rows are created
+-- UNCOSTED. cost IS NULL means "not costed yet", distinct from zero.
+create table if not exists public.part_costs (
+  id            uuid primary key default gen_random_uuid(),
+  price_book_id uuid not null references public.price_books(id) on delete cascade,
+  kind          text not null check (kind in ('end_flange','lap_flange','splice','reel','support')),
+  rtp_size text, flange_size text, flange_id text,
+  ansi_class integer, sealing text, material text, reel_code text,
+  label text not null,
+  cost       numeric(12,2) check (cost is null or cost >= 0),
+  list_price numeric(12,2) check (list_price is null or list_price >= 0),
+  unit text not null default '$/ea',
+  notes text, sort integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+-- `label` is in the key because support rows carry no size or class and would
+-- otherwise all collapse to the same key.
+create unique index if not exists part_costs_key on public.part_costs (
+  price_book_id, kind, coalesce(rtp_size,''), coalesce(flange_size,''),
+  coalesce(flange_id,''), coalesce(ansi_class,0), coalesce(sealing,''),
+  coalesce(material,''), coalesce(reel_code,''), label);
+create index if not exists part_costs_book on public.part_costs (price_book_id, kind, sort);
+
+create table if not exists public.line_speeds (
+  id uuid primary key default gen_random_uuid(),
+  price_book_id uuid not null references public.price_books(id) on delete cascade,
+  rtp_size text not null,
+  stage text not null check (stage in ('Base','Braider','Cover')),
+  ft_per_min numeric(10,3), passes integer not null default 1,
+  efficiency numeric(5,3) not null default 0.8,
+  braider_mult numeric(5,2) not null default 1,
+  sort integer not null default 0,
+  unique (price_book_id, rtp_size, stage)
+);
+
+create table if not exists public.quote_settings (
+  key text primary key, value numeric, label text not null,
+  unit text, notes text, updated_at timestamptz not null default now()
+);
+
+alter table public.part_costs     enable row level security;
+alter table public.line_speeds    enable row level security;
+alter table public.quote_settings enable row level security;
+
+create policy part_costs_select on public.part_costs
+  for select to authenticated using (private.is_active_member());
+create policy part_costs_admin on public.part_costs
+  for all to authenticated using (private.is_admin()) with check (private.is_admin());
+create policy line_speeds_select on public.line_speeds
+  for select to authenticated using (private.is_active_member());
+create policy line_speeds_admin on public.line_speeds
+  for all to authenticated using (private.is_admin()) with check (private.is_admin());
+create policy quote_settings_select on public.quote_settings
+  for select to authenticated using (private.is_active_member());
+create policy quote_settings_admin on public.quote_settings
+  for all to authenticated using (private.is_admin()) with check (private.is_admin());
