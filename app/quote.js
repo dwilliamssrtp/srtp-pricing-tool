@@ -15,7 +15,7 @@
    not 50%. That is the workbook's intent, not a rounding error.
    ===================================================================== */
 
-import { labourDays } from "./parts.js?v=20261009-1339";
+import { labourDays } from "./parts.js?v=20261009-1350";
 
 const n = v => (v === null || v === undefined || Number.isNaN(Number(v)) ? 0 : Number(v));
 
@@ -50,8 +50,13 @@ export function groupTotals(lines, settings, labourStages) {
       buffer: settings.daysBuffer
     });
   }
-  const dayCharge = labour && labour.totalDays !== null
-    ? labour.totalDays * n(settings.dayCost) : null;
+  // A typed day count wins over the calculator, so a schedule can be tested
+  // without disturbing the line speeds everyone else quotes from.
+  const override = pipe && pipe.days_override != null ? Number(pipe.days_override) : null;
+  const days = override !== null ? override : (labour ? labour.totalDays : null);
+  if (labour) labour.effectiveDays = days;
+  if (labour) labour.overridden = override !== null;
+  const dayCharge = days === null ? null : days * n(settings.dayCost);
 
   return {
     rows, pipe, extended, budget,
@@ -89,7 +94,7 @@ export function quoteTotals(lines, settings, stagesByGroup = {}) {
     trueMargin: extended ? 1 - (budget + dayCharge) / extended : null,
     missingCost:  [...new Set(groups.flatMap(g => g.missingCost))],
     placeholders: [...new Set(groups.flatMap(g => g.placeholders))],
-    totalDays: groups.reduce((s, g) => s + (g.labour?.totalDays ?? 0), 0)
+    totalDays: groups.reduce((s, g) => s + (g.labour?.effectiveDays ?? 0), 0)
   };
 }
 
@@ -141,4 +146,26 @@ export function priceHistoryNotice(productKey, currentPrice, history) {
     differs,
     all: prior.slice(0, 5)
   };
+}
+
+/* ---------------------------------------------------------------------
+   Back-solve a unit price from a target margin, so a margin can be typed
+   directly. Inverts the margin formula, scrap and all:
+
+     margin = 1 - (cost x manufactured) / (price x supplied)
+       =>   price = (cost x manufactured) / ((1 - margin) x supplied)
+
+   Because cost is charged on manufactured units, asking for 50% on a job
+   with 5% scrap yields a higher price than cost x 2 — which is the point.
+   --------------------------------------------------------------------- */
+export function priceForMargin(line, targetMargin, scrapPct) {
+  const t = lineTotals(line, scrapPct);
+  if (t.cost === null || !t.supplied || targetMargin >= 1) return null;
+  return (t.cost * t.manufactured) / ((1 - targetMargin) * t.supplied);
+}
+
+/* The margin a given price produces — used to show the effect live. */
+export function marginForPrice(line, price, scrapPct) {
+  const t = lineTotals({ ...line, unit_price: price }, scrapPct);
+  return t.margin;
 }

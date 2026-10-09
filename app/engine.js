@@ -3,7 +3,7 @@ import {
   COUPLING_OD_POST, CDS_FITTINGS, SERVICES, LINER_SWEET, LINER_SOUR,
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE
-} from "./data.js?v=20261009-1339";
+} from "./data.js?v=20261009-1350";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine

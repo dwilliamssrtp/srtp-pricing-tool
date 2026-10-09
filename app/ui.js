@@ -5,12 +5,12 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
-} from "./data.js?v=20261009-1339";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1339";
-import * as DB from "./db.js?v=20261009-1339";
-import { initPages } from "./pages.js?v=20261009-1339";
-import * as PARTSUI from "./partsui.js?v=20261009-1339";
-import * as QUOTESUI from "./quotesui.js?v=20261009-1339";
+} from "./data.js?v=20261009-1350";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1350";
+import * as DB from "./db.js?v=20261009-1350";
+import { initPages } from "./pages.js?v=20261009-1350";
+import * as PARTSUI from "./partsui.js?v=20261009-1350";
+import * as QUOTESUI from "./quotesui.js?v=20261009-1350";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -20,7 +20,7 @@ let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261009-1339";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261009-1350";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))

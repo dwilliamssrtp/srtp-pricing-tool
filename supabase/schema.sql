@@ -313,3 +313,9 @@ create policy quote_settings_select on public.quote_settings
   for select to authenticated using (private.is_active_member());
 create policy quote_settings_admin on public.quote_settings
   for all to authenticated using (private.is_admin()) with check (private.is_admin());
+
+-- Quote-level overrides. These live on the quote, never on the master cost
+-- sheet: playing with a margin on one job must not restate anyone else's.
+alter table public.quote_lines
+  add column if not exists days_override   integer,
+  add column if not exists cost_overridden boolean not null default false;

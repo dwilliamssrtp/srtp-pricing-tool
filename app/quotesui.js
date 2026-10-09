@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261009-1339";
-import { solve } from "./engine.js?v=20261009-1339";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1339";
-import { quoteTotals, salesQuoteView, priceHistoryNotice } from "./quote.js?v=20261009-1339";
+import * as DB from "./db.js?v=20261009-1350";
+import { solve } from "./engine.js?v=20261009-1350";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1350";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1350";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -167,11 +167,24 @@ function editorPage() {
       <button id="qSales">Sales quote view</button>
       <span id="qStatus"></span>
     </div>
-    <p class="ref">Customer: <b>${esc(q.customers ? q.customers.name : "—")}</b> &middot;
-      scrap ${(st.scrapPct*100).toFixed(1)}% &middot; markup ${(st.markup*100).toFixed(0)}% &middot;
-      day cost ${money(st.dayCost,0)} &middot; buffer ${st.daysBuffer} days.
-      These were copied onto the quote when it was created, so changing the global settings later
-      will not restate it.</p>`;
+    <div class="savebar">
+      <span class="ref">Customer <b>${esc(q.customers ? q.customers.name : "—")}</b></span>
+      <label class="ref">Scrap % <input class="qset2" data-k="scrap_pct" type="number" step="0.5"
+        value="${(st.scrapPct*100).toFixed(2)}" style="width:74px;text-align:right"></label>
+      <label class="ref">Markup % <input class="qset2" data-k="markup" type="number" step="5"
+        value="${(st.markup*100).toFixed(0)}" style="width:78px;text-align:right"></label>
+      <label class="ref">Day cost <input class="qset2" data-k="day_cost" type="number" step="100"
+        value="${st.dayCost}" style="width:106px;text-align:right"></label>
+      <label class="ref">Hrs/day <input class="qset2" data-k="hours_per_day" type="number" step="1"
+        value="${st.hoursPerDay}" style="width:66px;text-align:right"></label>
+      <label class="ref">Day buffer <input class="qset2" data-k="days_buffer" type="number" step="1"
+        value="${st.daysBuffer}" style="width:66px;text-align:right"></label>
+      <button id="qReprice" title="Reset every unit price to cost x (1 + markup)">Re-price at markup</button>
+    </div>
+    <p class="ref">These settings belong to <b>this quote</b>: changing them here restates nothing
+      else, and changing the defaults on the Pricing page will not restate this quote.
+      Unit cost, margin and days are editable per line &mdash; an overridden cost is marked
+      &#9679; and is never written back to the master cost sheet.</p>`;
 
   const warn = [];
   if (T.placeholders.length)
@@ -202,17 +215,35 @@ function editorPage() {
              type="number" step="0.01" min="0" value="${r.price ?? ""}"
              placeholder="not set" style="width:96px;text-align:right">`, n:1, raw:true },
       { v: r.extended == null ? "—" : money(r.extended, 0), n:1 },
-      { v: r.cost == null ? '<span class="bad">no cost</span>'
-          : money(r.cost) + (r.cost_is_placeholder ? ' <span class="wn">(placeholder)</span>' : ""),
+      /* Cost is editable so a placeholder can be overridden for this quote
+         alone. The override never writes back to the master cost sheet. */
+      { v: `<input class="qln" data-g="${g.groupNo}" data-s="${r.sort}" data-f="unit_cost"
+             type="number" step="0.01" min="0" value="${r.cost ?? ""}"
+             placeholder="no cost" title="${r.cost_overridden ? "Overridden on this quote"
+               : r.cost_is_placeholder ? "Placeholder from the cost sheet" : "From the cost sheet"}"
+             style="width:92px;text-align:right${r.cost_overridden ? ";border-color:var(--accent2)" : ""}">`
+          + (r.cost_overridden ? ' <span class="ref" title="Overridden">●</span>'
+             : r.cost_is_placeholder ? ' <span class="wn" title="Placeholder">◌</span>' : ""),
         n:1, raw:true },
       { v: r.budget == null ? "—" : money(r.budget, 0), n:1 },
-      { v: r.margin == null ? "—" : (r.margin*100).toFixed(1)+"%", n:1 }
+      /* Typing a margin back-solves the unit price, scrap included. */
+      { v: `<input class="qmargin" data-g="${g.groupNo}" data-s="${r.sort}"
+             type="number" step="0.5" max="99" value="${r.margin == null ? "" : (r.margin*100).toFixed(1)}"
+             placeholder="—" title="Type a target margin to set the price"
+             style="width:74px;text-align:right">%`, n:1, raw:true }
     ]}));
     const lab = g.labour;
-    const labTxt = !lab ? "" : lab.missing.length
-      ? `<span class="wn">line speeds missing for ${esc(lab.missing.join(", "))}</span>`
-      : `${f(lab.longestDays,2)} days on the longest stage → <b>${lab.totalDays} days</b>
-         × ${money(st.dayCost,0)} = ${money(g.dayCharge,0)}`;
+    const pipeLine = g.rows.find(x => x.kind === "pipe");
+    const daysBox = `<input class="qdays" data-g="${g.groupNo}" type="number" min="0" step="1"
+        value="${pipeLine && pipeLine.days_override != null ? pipeLine.days_override : ""}"
+        placeholder="${lab && lab.totalDays != null ? lab.totalDays : "auto"}"
+        title="Blank uses the labour calculator" style="width:72px;text-align:right">`;
+    const labTxt = !lab ? `Days ${daysBox}` : lab.missing.length
+      ? `<span class="wn">line speeds missing for ${esc(lab.missing.join(", "))}</span> &middot; days ${daysBox}`
+      : `${f(lab.longestDays,2)} days on the longest stage &rarr; calculator says
+         <b>${lab.totalDays}</b>. Using ${daysBox}
+         ${lab.overridden ? '<span class="wn">(overridden)</span>' : ""}
+         &times; ${money(st.dayCost,0)} = ${money(g.dayCharge ?? 0,0)}`;
     return `<h4>Group ${g.groupNo} <button data-rmg="${g.groupNo}" title="Remove">×</button></h4>`
       + tbl(["Line",{t:"Supplied",n:1},{t:"Manufactured",n:1},{t:"Unit price",n:1},
              {t:"Extended",n:1},{t:"Unit cost",n:1},{t:"Budget",n:1},{t:"Margin",n:1}], rows)
@@ -396,10 +427,25 @@ document.addEventListener("click", async e => {
       return;
     }
 
+    if (e.target.id === "qReprice") {
+      const m = quoteSettings(CUR).markup;
+      let count = 0;
+      for (const l of CUR.lines) {
+        if (l.unit_cost == null) continue;
+        l.unit_price = Math.round(Number(l.unit_cost) * (1 + m) * 10000) / 10000;
+        count++;
+      }
+      await refreshHistory(); H.refresh();
+      status(`Re-priced ${count} line(s) at ${(m * 100).toFixed(0)}% markup.`);
+      return;
+    }
+
     if (e.target.id === "qSave") {
       await DB.updateQuote(CUR.id, {
         title: document.getElementById("qTitle").value.trim(),
         status: document.getElementById("qStatusSel").value,
+        scrap_pct: CUR.scrap_pct, markup: CUR.markup, day_cost: CUR.day_cost,
+        hours_per_day: CUR.hours_per_day, days_buffer: CUR.days_buffer,
         snapshot: snapshotOf()
       });
       await DB.replaceQuoteLines(CUR.id, CUR.lines.map(stripLine));
@@ -418,7 +464,9 @@ const stripLine = l => ({
   supplied_units: l.supplied_units ?? l.supplied ?? 0,
   manufactured_units: l.manufactured_units ?? null,
   unit_price: l.unit_price ?? null, unit_cost: l.unit_cost ?? null,
-  unit: l.unit || "ea", cost_is_placeholder: !!l.cost_is_placeholder
+  unit: l.unit || "ea", cost_is_placeholder: !!l.cost_is_placeholder,
+  days_override: l.days_override == null ? null : Number(l.days_override),
+  cost_overridden: !!l.cost_overridden
 });
 
 function snapshotOf() {
@@ -430,12 +478,56 @@ function snapshotOf() {
 /* Line edits update in memory; Save persists. */
 document.addEventListener("change", async e => {
   if (!H || !CUR) return;
-  const box = e.target.closest(".qln");
-  if (!box) return;
-  const g = Number(box.dataset.g), s = Number(box.dataset.s);
-  const line = CUR.lines.find(l => Number(l.group_no) === g && Number(l.sort) === s);
-  if (!line) return;
-  line[box.dataset.f] = box.value === "" ? null : Number(box.value);
-  if (line.kind === "pipe") await refreshHistory();
-  H.refresh();
+  const box    = e.target.closest(".qln");
+  const margin = e.target.closest(".qmargin");
+  const days   = e.target.closest(".qdays");
+  const qs     = e.target.closest(".qset2");
+
+  const lineAt = (g, s) =>
+    CUR.lines.find(l => Number(l.group_no) === Number(g) && Number(l.sort) === Number(s));
+
+  if (box) {
+    const line = lineAt(box.dataset.g, box.dataset.s);
+    if (!line) return;
+    const v = box.value === "" ? null : Number(box.value);
+    line[box.dataset.f] = v;
+    // A typed cost is an override for this quote only.
+    if (box.dataset.f === "unit_cost") {
+      line.cost_overridden = true;
+      line.cost_is_placeholder = false;
+    }
+    if (line.kind === "pipe") await refreshHistory();
+    H.refresh();
+    return;
+  }
+
+  if (margin) {
+    const line = lineAt(margin.dataset.g, margin.dataset.s);
+    if (!line) return;
+    if (margin.value === "") { H.refresh(); return; }
+    const target = Number(margin.value) / 100;
+    const price = priceForMargin(line, target, quoteSettings(CUR).scrapPct);
+    if (price === null) { status("Need a unit cost before a margin can set the price.", true); return; }
+    line.unit_price = Math.round(price * 10000) / 10000;
+    if (line.kind === "pipe") await refreshHistory();
+    H.refresh();
+    return;
+  }
+
+  if (days) {
+    const pipe = CUR.lines.find(l => Number(l.group_no) === Number(days.dataset.g) && l.kind === "pipe");
+    if (!pipe) return;
+    pipe.days_override = days.value === "" ? null : Number(days.value);
+    H.refresh();
+    return;
+  }
+
+  if (qs) {
+    const k = qs.dataset.k;
+    let v = qs.value === "" ? 0 : Number(qs.value);
+    if (k === "scrap_pct" || k === "markup") v = v / 100;   // entered as a percentage
+    CUR[k] = v;
+    H.refresh();
+    return;
+  }
 });
