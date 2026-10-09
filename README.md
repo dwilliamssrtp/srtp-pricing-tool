@@ -39,6 +39,18 @@ serve.ps1         local static server (ES modules need a real HTTP origin)
 No build step and no dependencies to install. `supabase-js` is loaded from a
 pinned CDN URL as an ES module. Deploy by pushing to `main`.
 
+## Deploying
+
+Run `bump.ps1` before committing whenever anything under `app/` changes, then
+push. GitHub Pages serves every file with `Cache-Control: max-age=600`, so for
+ten minutes after a deploy a browser can hold a stale copy — and can end up with
+a fresh `index.html` beside a stale `app/ui.js`, which fails confusingly.
+`bump.ps1` stamps one `?v=` token across the entry point and every import, so a
+deploy is a distinct set of URLs and the browser takes all of it or none.
+
+The build id is shown in the header next to your name, so a stale tab is
+identifiable at a glance.
+
 ## Running locally
 
 ```

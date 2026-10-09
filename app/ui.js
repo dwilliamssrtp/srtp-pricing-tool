@@ -5,10 +5,10 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T
-} from "./data.js";
-import { solve, solveSpool, matKey } from "./engine.js";
-import * as DB from "./db.js";
-import { initPages } from "./pages.js";
+} from "./data.js?v=20261009-1247";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1247";
+import * as DB from "./db.js?v=20261009-1247";
+import { initPages } from "./pages.js?v=20261009-1247";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -18,6 +18,7 @@ let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let PAGES = null;              // top-level page controller, created at boot
+const BUILD = "20261009-1247";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -1183,7 +1184,8 @@ function showGate(view, msg, bad) {
 
 async function enterApp(profile) {
   ME = profile;
-  $("whoami").textContent = `${profile.full_name || profile.email} · ${profile.role}`;
+  // The build id is shown so a stale cached copy is identifiable at a glance.
+  $("whoami").textContent = `${profile.full_name || profile.email} · ${profile.role} · ${BUILD}`;
   BOOKS = await DB.listPriceBooks();
   renderBookPicker();
   await useBook(I.priceBookId && BOOKS.some(b => b.id === I.priceBookId) ? I.priceBookId : null);
