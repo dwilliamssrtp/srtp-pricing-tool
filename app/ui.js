@@ -8,6 +8,7 @@ import {
 } from "./data.js";
 import { solve, solveSpool, matKey } from "./engine.js";
 import * as DB from "./db.js";
+import { initPages } from "./pages.js";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -16,6 +17,7 @@ let PRICES = { polymer: {}, braid: {}, coupling: {} };
 let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
+let PAGES = null;              // top-level page controller, created at boot
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -265,7 +267,7 @@ function renderDisplay() {
 /* =====================================================================
    sheet renderers
    ===================================================================== */
-const SHEETS = ["TDS","MDS","MDS (2)","CDS","MDS1","WO","Materials","Pricing","Users","Trace"];
+const SHEETS = ["TDS","MDS","MDS (2)","CDS","MDS1","WO","Materials","Trace"];
 
 function renderTabs() {
   document.getElementById("tabs").innerHTML = SHEETS.map(s =>
@@ -669,7 +671,7 @@ function renderPanel() {
   p.innerHTML = ({
     "TDS": sheetTDS, "MDS": sheetMDS, "MDS (2)": sheetMDS2, "CDS": sheetCDS,
     "MDS1": sheetMDS1, "WO": sheetWO, "Materials": sheetMaterials,
-    "Pricing": sheetPricing, "Users": sheetUsers, "Trace": sheetTrace
+    "Trace": sheetTrace
   }[TAB] || sheetTDS)(r);
 }
 
@@ -957,7 +959,7 @@ document.addEventListener("change", async e => {
   if (!sel) return;
   try {
     await DB.setProfile(sel.dataset.id, { role: sel.value });
-    await reloadUsers(); renderPanel();
+    await reloadUsers(); if (PAGES) PAGES.refresh();
     usrStatus("Role updated.");
   } catch (err) { usrStatus(err.message, true); }
 });
@@ -971,7 +973,7 @@ document.addEventListener("click", async e => {
   if (act) {
     try {
       await DB.setProfile(act.dataset.act, { is_active: act.dataset.to === "on" });
-      await reloadUsers(); renderPanel();
+      await reloadUsers(); if (PAGES) PAGES.refresh();
       usrStatus(act.dataset.to === "on" ? "Activated." : "Deactivated.");
     } catch (err) { usrStatus(err.message, true); }
   }
@@ -987,7 +989,7 @@ document.addEventListener("click", async e => {
     const u = USERS.find(x => x.id === del.dataset.delu);
     if (!confirm(`Delete the account for ${u ? u.email : "this user"}? This cannot be undone. `
                + `Any designs they saved are kept and reassigned to you.`)) return;
-    try { await DB.deleteUser(del.dataset.delu); await reloadUsers(); renderPanel();
+    try { await DB.deleteUser(del.dataset.delu); await reloadUsers(); if (PAGES) PAGES.refresh();
           usrStatus("Account deleted."); }
     catch (err) { usrStatus(err.message, true); }
   }
@@ -1000,7 +1002,7 @@ document.addEventListener("click", async e => {
     if (!email || !pass) { usrStatus("Email and a temporary password are required.", true); return; }
     try {
       await DB.createUser(email, pass, role, name);
-      await reloadUsers(); renderPanel();
+      await reloadUsers(); if (PAGES) PAGES.refresh();
       usrStatus(`Created ${email} as ${role}.`);
     } catch (err) { usrStatus(err.message, true); }
   }
@@ -1076,6 +1078,7 @@ async function useBook(bookId) {
   await reloadUsers();
   const sel = document.getElementById("priceBasis");
   if (sel) sel.value = BOOK.id;
+  if (PAGES) PAGES.refresh();   // keep the pricing page in step with the book
   recalc();
 }
 
@@ -1186,6 +1189,11 @@ async function enterApp(profile) {
   await useBook(I.priceBookId && BOOKS.some(b => b.id === I.priceBookId) ? I.priceBookId : null);
   renderBookPicker();
   showGate("app");
+
+  PAGES = initPages({ pricingHTML: sheetPricing, usersHTML: sheetUsers });
+  PAGES.showUsers(profile.role === "admin");
+  PAGES.restore();
+
   recalc({ rebuild: true });
   refreshDesignList();
 }

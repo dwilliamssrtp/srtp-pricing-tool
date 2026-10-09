@@ -36,9 +36,17 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-fo
 header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .hd{max-width:1500px;margin:0 auto;padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-.brand{display:flex;flex-direction:column;gap:1px;margin-right:auto}
-.brand b{font-size:16px;letter-spacing:.2px}
-.brand span{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.14em}
+.brand{display:flex;align-items:center}
+.brand b{font-size:12.5px;font-weight:700;letter-spacing:.04em;color:var(--ink2);white-space:nowrap}
+
+/* top-level pages */
+.pagenav{display:flex;gap:2px;margin-right:auto;background:var(--bg2);border:1px solid var(--line);
+  border-radius:9px;padding:3px}
+.pagenav button{border:0;background:transparent;color:var(--ink2);border-radius:6px;
+  padding:6px 16px;font-size:13px;font-weight:600}
+.pagenav button:hover{color:var(--ink);background:var(--card)}
+.pagenav button[aria-selected="true"]{background:var(--accent);color:#17120c}
+.page[hidden]{display:none}
 .hdkpi{display:flex;gap:10px;flex-wrap:wrap}
 .hdkpi div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 11px;line-height:1.25}
 .hdkpi em{display:block;font-style:normal;font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em}
@@ -193,7 +201,12 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 
 <header>
   <div class="hd">
-    <div class="brand"><b>SRTP Pricing Tool</b><span>v7 &middot; live design &amp; cost engine</span></div>
+    <div class="brand"><b>SRTP Pricing</b></div>
+    <nav class="pagenav" id="pagenav">
+      <button data-page="designer" aria-selected="true">Designer</button>
+      <button data-page="pricing">Pricing</button>
+      <button data-page="users" hidden>Users</button>
+    </nav>
     <div class="hdkpi" id="hdkpi"></div>
     <select id="priceBasis" title="Which price book drives the cost build-up"></select>
     <button id="themeBtn" title="Toggle light / dark">&#9681;</button>
@@ -205,6 +218,8 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 </header>
 
 <div class="wrap">
+
+<section class="page" id="page-designer">
 
   <h2 class="sec">1 &nbsp;Input section</h2>
 
@@ -293,6 +308,18 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
     no visible sheet reads them.
   </p>
 </div>
+
+</section>
+
+<section class="page" id="page-pricing" hidden>
+  <h2 class="sec">Master pricing sheet</h2>
+  <div id="pricingPage"></div>
+</section>
+
+<section class="page" id="page-users" hidden>
+  <h2 class="sec">Team accounts</h2>
+  <div id="usersPage"></div>
+</section>
 
 </div>
 
