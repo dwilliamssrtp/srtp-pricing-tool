@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261009-1350";
-import { solve } from "./engine.js?v=20261009-1350";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1350";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1350";
+import * as DB from "./db.js?v=20261009-1405";
+import { solve } from "./engine.js?v=20261009-1405";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261009-1405";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261009-1405";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -531,3 +531,14 @@ document.addEventListener("change", async e => {
     return;
   }
 });
+
+/* Refresh just the saved-design list. Called whenever a design is saved or
+   deleted on the Designer page, so a new design is immediately available to
+   quote against without reloading the site. */
+export async function reloadDesigns() {
+  try { DESIGNS = await DB.listDesigns(); } catch (e) { /* keep the old list */ }
+}
+/* Same for customers, after one is created elsewhere. */
+export async function reloadCustomers() {
+  try { CUSTOMERS = await DB.listCustomers(); } catch (e) { /* keep the old list */ }
+}
