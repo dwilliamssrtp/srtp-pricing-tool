@@ -1,7 +1,7 @@
 /* =====================================================================
    Supabase client, session handling and data access.
    ===================================================================== */
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261009-1546";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261012-1357";
 
 const { createClient } = await import(SUPABASE_JS);
 
@@ -377,4 +377,39 @@ export async function allPipeLines() {
     .select("quote_id,label").eq("kind", "pipe");
   if (error) throw error;
   return data || [];
+}
+
+/* ------------------------------------------------- manufacturing datasheets */
+export async function listMds() {
+  const { data, error } = await sb.from("mds_documents")
+    .select("id,doc_number,revision,title,client,project,issued_on,design_id,updated_at")
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+export async function loadMds(id) {
+  const { data, error } = await sb.from("mds_documents").select("*").eq("id", id).single();
+  if (error) throw error;
+  return data;
+}
+export async function saveMds(row) {
+  if (row.id) {
+    const { id, ...patch } = row;
+    const { data, error } = await sb.from("mds_documents")
+      .update(patch).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  }
+  const { data: { user } } = await sb.auth.getUser();
+  // A new document carries id:null from the client. Sending it explicitly
+  // overrides the column default and the insert fails on NOT NULL, so drop it.
+  const { id: _drop, ...fresh } = row;
+  const { data, error } = await sb.from("mds_documents")
+    .insert({ ...fresh, created_by: user.id }).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deleteMds(id) {
+  const { error } = await sb.from("mds_documents").delete().eq("id", id);
+  if (error) throw error;
 }

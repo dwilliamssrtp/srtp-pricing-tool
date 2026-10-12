@@ -5,13 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER
-} from "./data.js?v=20261009-1546";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261009-1546";
-import * as DB from "./db.js?v=20261009-1546";
-import { initPages } from "./pages.js?v=20261009-1546";
-import * as PARTSUI from "./partsui.js?v=20261009-1546";
-import * as QUOTESUI from "./quotesui.js?v=20261009-1546";
-import { optimise } from "./optimise.js?v=20261009-1546";
+} from "./data.js?v=20261012-1357";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1357";
+import * as DB from "./db.js?v=20261012-1357";
+import { initPages } from "./pages.js?v=20261012-1357";
+import * as PARTSUI from "./partsui.js?v=20261012-1357";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1357";
+import * as MDS from "./mds.js?v=20261012-1357";
+import { optimise } from "./optimise.js?v=20261012-1357";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -23,7 +24,7 @@ let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261009-1546";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1357";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -287,7 +288,7 @@ function renderDisplay() {
 /* =====================================================================
    sheet renderers
    ===================================================================== */
-const SHEETS = ["TDS","MDS","MDS (2)","CDS","MDS1","WO","Materials","Trace"];
+const SHEETS = ["TDS","CDS","WO","Materials","Trace"];
 
 function renderTabs() {
   document.getElementById("tabs").innerHTML = SHEETS.map(s =>
@@ -689,9 +690,8 @@ function sheetTrace(r) {
 function renderPanel() {
   const r = R, p = document.getElementById("panel");
   p.innerHTML = ({
-    "TDS": sheetTDS, "MDS": sheetMDS, "MDS (2)": sheetMDS2, "CDS": sheetCDS,
-    "MDS1": sheetMDS1, "WO": sheetWO, "Materials": sheetMaterials,
-    "Trace": sheetTrace
+    "TDS": sheetTDS, "CDS": sheetCDS, "WO": sheetWO,
+    "Materials": sheetMaterials, "Trace": sheetTrace
   }[TAB] || sheetTDS)(r);
 }
 
@@ -1175,6 +1175,7 @@ async function doSave() {
     // The Quotes page keeps its own copy of the design list; refresh it so a
     // newly saved design can be quoted without reloading the site.
     await QUOTESUI.reloadDesigns();
+    await MDS.reloadDesigns();
     if (PAGES) PAGES.refresh();
   } catch (err) { setStatus(err.message, true); }
 }
@@ -1196,6 +1197,7 @@ document.addEventListener("click", async e => {
           if (CURRENT_DESIGN?.id === del.dataset.del) CURRENT_DESIGN = null;
           refreshDesignList();
           await QUOTESUI.reloadDesigns();
+    await MDS.reloadDesigns();
           if (PAGES) PAGES.refresh();
           setStatus("Deleted."); }
     catch (err) { setStatus(err.message, true); }
@@ -1251,9 +1253,20 @@ async function enterApp(profile) {
   // loadRefs already ran inside useBook() above.
   await QUOTESUI.loadList();
 
+  MDS.init({
+    tbl, esc, money, f, f0, f3, f4,
+    bookId:  () => BOOK && BOOK.id,
+    prices:  () => PRICES,
+    inputs:  () => ({ ...I }),
+    solved:  () => R,
+    refresh: () => { if (PAGES) PAGES.refresh(); }
+  });
+  await MDS.load();
+
   PAGES = initPages({
     pricingHTML: sheetPricing, usersHTML: sheetUsers,
-    quotesHTML:  QUOTESUI.quotesHTML, archiveHTML: QUOTESUI.archiveHTML
+    quotesHTML:  QUOTESUI.quotesHTML, archiveHTML: QUOTESUI.archiveHTML,
+    mdsHTML:     MDS.mdsHTML
   });
   PAGES.showUsers(profile.role === "admin");
   PAGES.restore();

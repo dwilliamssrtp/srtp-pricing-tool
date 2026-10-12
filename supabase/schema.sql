@@ -319,3 +319,33 @@ create policy quote_settings_admin on public.quote_settings
 alter table public.quote_lines
   add column if not exists days_override   integer,
   add column if not exists cost_overridden boolean not null default false;
+
+-- Manufacturing datasheets. A controlled document: the snapshot is frozen at
+-- save and the sheet prints from it, never from a live recompute, so an issued
+-- MDS keeps saying what it said after the design moves on.
+create table if not exists public.mds_documents (
+  id uuid primary key default gen_random_uuid(),
+  design_id uuid references public.designs(id) on delete set null,
+  doc_number text, revision text not null default 'A', title text not null,
+  client text, project text, prepared_by text, approved_by text,
+  issued_on date default current_date,
+  burst_basis text not null default 'api' check (burst_basis in ('api','stress_rupture')),
+  notes text, snapshot jsonb not null,
+  price_book_id uuid references public.price_books(id),
+  created_by uuid not null references public.profiles(id) default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.mds_documents enable row level security;
+create policy mds_select on public.mds_documents
+  for select to authenticated using (private.is_active_member());
+create policy mds_insert on public.mds_documents
+  for insert to authenticated
+  with check (private.can_edit() and created_by = (select auth.uid()));
+create policy mds_update on public.mds_documents
+  for update to authenticated
+  using (private.can_edit() and (created_by = (select auth.uid()) or private.is_admin()))
+  with check (private.can_edit());
+create policy mds_delete on public.mds_documents
+  for delete to authenticated
+  using (created_by = (select auth.uid()) or private.is_admin());
