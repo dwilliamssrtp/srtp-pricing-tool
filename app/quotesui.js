@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1609";
-import { solve } from "./engine.js?v=20261012-1609";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261012-1609";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261012-1609";
+import * as DB from "./db.js?v=20261012-1655";
+import { solve } from "./engine.js?v=20261012-1655";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261012-1655";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261012-1655";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -107,7 +107,7 @@ export function groupFromDesign(design, { groupNo, suppliedFt, connectionMateria
 
   const lines = [{
     group_no: groupNo, sort: 0, kind: "pipe", label: r.productName,
-    design_id: design.id, product_key: r.productName,
+    design_id: design.id, product_key: r.productKey || r.productName,
     supplied_units: suppliedFt, manufactured_units: null, unit: "ft",
     unit_cost: r.costPerFt, unit_price: r.costPerFt * (1 + markup),
     cost_is_placeholder: false

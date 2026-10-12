@@ -37,7 +37,8 @@ const PIPE_ORDER = ["1","1.25","1.5","1.75","2","2.375","2.375 DH","2.375 LPG",
 /* Inputs!AI28:AN38 — polymer master. cost = the live Inputs!J4:J15 price book. */
 const MATERIALS = {
   "Nylon - 290":                            { sg:1.13, alt:"Nylon - 290 (Low Temp)",  comp:900,  acr:"PA" },
-  "Nylon - 290Z":                           { sg:1.13, alt:"Nylon - 290Z (hi Temp)",  comp:900,  acr:"PA" },
+  "Nylon - 290Z":                           { sg:1.13, alt:"Nylon - 290Z (hi Temp)",  comp:900,  acr:"PA",
+                                              code:"PAZ" },
   "PPS":                                    { sg:1.25, alt:"",  comp:null, acr:"PS" },
   "Admer":                                  { sg:0.92, alt:"Admer (Sweet)",  comp:null, acr:""   },
   "Lotader":                                { sg:0.92, alt:"Lotader (Sour)",  comp:null, acr:""   },
@@ -47,7 +48,7 @@ const MATERIALS = {
      short display label. The KEY stays as the workbook wrote it, because the
      price book, saved designs and quote lines all reference it. */
   "PPUVHSWHHT - WashPenn PreBlended HT PP": { sg:0.96, alt:"", comp:null, acr:"PP",
-                                              display:"PPUVHSWHHT" },
+                                              display:"PPUVHSWHHT", code:"PPUVHT" },
   "PPMBUVWH - White Color Concentrate":     { sg:0.90, alt:"",  comp:null, acr:""   },
   "PPMBUVYL - Yellow LPG":                  { sg:0.90, alt:"",  comp:null, acr:""   },
   "PVDF (Kynar)":                           { sg:1.87, alt:"", comp:null, acr:"PV" }
@@ -236,6 +237,32 @@ export const LONGS_LADDER = (() => { const a=[]; for (let q=4; q<=200; q+=4) a.p
 
 /* What a material is called on screen and in print. Falls back to the key, so
    only materials that need a shorter name have to declare one. */
+/* Short codes for the product code, e.g. FL6000LPSJPPUVHT.
+
+   `acr` already carries the workbook's two-letter polymer codes (PPS -> PS),
+   so `code` is only needed where those collide: both PP grades carry acr
+   "PP", and the HT grade has to stay distinguishable from plain PP. */
+export const matCode = key => {
+  const k = (key || "").trim();
+  /* Sour service at 185F has no tabulated grade - the sheet answers
+     "Select 196F" and the engine warns. Keep that sentence out of a product
+     code; "??" says plainly that the grade is unresolved. */
+  if (!k || k === "Select 196°F") return "??";
+  const m = MATERIALS[k] || {};
+  return String(m.code || m.acr || m.display || k).replace(/[^A-Za-z0-9]/g, "");
+};
+
+export const APP_CODES = { "Flowline":"FL", "24-Tensile":"24T",
+                           "Downhole":"DH", "LPG":"LPG" };
+
+/* Nominal size in thousandths, four digits: 6 -> 6000, 4.5 -> 4500,
+   2.375 -> 2375. parseFloat drops any " DH" / " LPG" suffix, which the
+   application code already carries. */
+export const sizeCode = sizeKey => {
+  const n = parseFloat(String(sizeKey));
+  return Number.isFinite(n) ? String(Math.round(n * 1000)).padStart(4, "0") : "";
+};
+
 export const matLabel = key => {
   const k = (key || "").trim();
   return (MATERIALS[k] && MATERIALS[k].display) || k;

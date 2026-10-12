@@ -2,8 +2,9 @@ import {
   PIPE, MATERIALS, BRAID, COUPLING_BY_NAME, COUPLING_HI, COUPLING_LO,
   COUPLING_OD_POST, CDS_FITTINGS, SERVICES, LINER_SWEET, LINER_SOUR,
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
-  BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel
-} from "./data.js?v=20261012-1609";
+  BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
+  matCode, APP_CODES, sizeCode
+} from "./data.js?v=20261012-1655";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -261,9 +262,22 @@ export function solve(inp) {
   o.projectCost  = o.costPerFt  * o.lengthFt;
   o.projectPrice = o.sellPerFt  * o.lengthFt;
   o.projectWeight = o.weightPerFt * o.lengthFt;
-  // Short display names, so supplier wording stays out of the title.
-  o.productName = `OD:${o.sizeKey}in ID:${o.linerID}in ${o.psi}psi ${o.degF}°F `
-                + `L${matLabel(o.liner)} J${matLabel(o.jacket)}`;        // G4
+  /* Product code, e.g. FL6000LPSJPPUVHT: application, nominal size in
+     thousandths, L + liner code, J + jacket code. Replaces the long
+     descriptive title that used to run OD/ID/psi/degF - that detail is still
+     on the MDS, in its header and its print legend. */
+  o.productCode = (APP_CODES[o.app] || String(o.app || "").toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                + sizeCode(o.sizeKey)
+                + "L" + matCode(o.liner)
+                + "J" + matCode(o.jacket);                              // G4
+  o.productName = o.productCode;
+  /* The code carries no pressure, and temperature only as far as the grade
+     implies it, so two duties can share one. The price-history signature
+     keeps them apart - otherwise a 6in 1500psi line would be compared
+     against a 6in 3000psi one and the repeat-price warning would be wrong. */
+  o.productKey  = `${o.productCode}-${o.psi}-${o.degF}`;
+  o.productDesc = `OD:${o.sizeKey}in ID:${o.linerID}in ${o.psi}psi ${o.degF}°F `
+                + `L${matLabel(o.liner)} J${matLabel(o.jacket)}`;
   // Display forms of each selected material, for the renderers to print.
   o.linerLabel  = matLabel(o.liner);
   o.bondLabel   = matLabel(o.bond);
@@ -326,7 +340,7 @@ export function solve(inp) {
       + `${o.apiNominal}'' Nominal - ${rnd(o.linerID,2)}'' ID - ${rnd(o.jacketOD,2)}'' OD`;
     o.printLine3 = `${o.sour} Environment Only - Use SRTP® couplings only - XXXXXXXXX01 (Date Code & Footage)`;
   }
-  o.printLine2 = `MAOP: ${o.psi}psi (${rUp(o.psi/14.5,1)}bars) - DT: ${o.degC}°C (${rUp(o.degC*9/5+32,0)}°F)`;
+  o.printLine2 = `MAOP: ${o.psi}psi (${rUp(o.psi/14.5,1)}bars) - MAOT: ${o.degC}°C (${rUp(o.degC*9/5+32,0)}°F)`;
 
   /* ---------------- 15. reel / wrap model (MDS1!K3:M47, F31:F39) --- */
   o.reelSP = inp.reelSP; o.reelHub = inp.reelHub; o.reelT = inp.reelT;
