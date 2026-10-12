@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
-} from "./data.js?v=20261012-1525";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1525";
-import * as DB from "./db.js?v=20261012-1525";
-import { initPages } from "./pages.js?v=20261012-1525";
-import * as PARTSUI from "./partsui.js?v=20261012-1525";
-import * as QUOTESUI from "./quotesui.js?v=20261012-1525";
-import * as MDS from "./mds.js?v=20261012-1525";
-import { optimise } from "./optimise.js?v=20261012-1525";
+} from "./data.js?v=20261012-1533";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1533";
+import * as DB from "./db.js?v=20261012-1533";
+import { initPages } from "./pages.js?v=20261012-1533";
+import * as PARTSUI from "./partsui.js?v=20261012-1533";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1533";
+import * as MDS from "./mds.js?v=20261012-1533";
+import { optimise, checkDesign } from "./optimise.js?v=20261012-1533";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261012-1525";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1533";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -124,6 +124,27 @@ function updateDerived(r) {
     const e = document.getElementById(id);
     if (e) { e.textContent = v[id]; e.title = v[id]; }
   }
+  /* The optimiser enforces the design rules, but a HAND edit never went near
+     them - coarsen the pitch yourself and nothing said the pipe had dropped
+     below the 0.67 SF stress-rupture burst. It still clears the API minimum
+     (2x MAOP) and still shows a burst far above the rating, so it reads as
+     passing. This states the verdict on whatever is in the boxes right now. */
+  const chk = document.getElementById("d_check");
+  if (chk) {
+    const c = checkDesign(r);
+    if (c.hard.length) {
+      chk.textContent = "Fails: " + c.hard.join("; ") + ".";
+      chk.className = "derived bad";
+    } else if (c.soft.length) {
+      chk.textContent = "Passes, with warnings: " + c.soft.join("; ") + ".";
+      chk.className = "derived wn";
+    } else {
+      chk.textContent = "Passes every design rule.";
+      chk.className = "derived ok";
+    }
+    chk.title = chk.textContent;
+  }
+
   const g = document.getElementById("grp24t");
   if (g) g.innerHTML = "24-Tensile layer " +
     (I.app === "24-Tensile" ? "" : "&mdash; inactive, Application is " + esc(I.app));
@@ -172,6 +193,8 @@ function renderInputs() {
     `<label>&nbsp;</label><div class="derived" style="grid-column:2/-1">
        <span id="optFlash" class="ok"></span><span id="d_opt"
          title="${esc(OPT_NOTE)}">${esc(OPT_NOTE)}</span></div>`,
+    `<label>Design check</label><div class="derived" id="d_check"
+       style="grid-column:2/-1"></div>`,
     field("X-braid (hoop)","xbraid","select",{opts:XBRAIDS}),
     field("Pitch","pitch","select",{opts:PITCH_LADDER,unit:"in"}),
     derived("Minimum pitch (braid width × 12)","d_minPitch", f(r.minPitch), "in"),
