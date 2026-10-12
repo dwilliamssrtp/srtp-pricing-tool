@@ -25,7 +25,14 @@ const PIPE = {
   "1.25":      { O:1.25, P:0.85, Q:0.88, R:0.08,   S:1.04,  T:1.25,  U:'1.25" Solid Wall',           V:0.02,  W:0.01, X:0.05   },
   "1":         { O:1,    P:0.62, Q:0.63, R:null,   S:null,  T:1,     U:'1"  Solid Wall',             V:0.02,  W:0.01, X:-0.03  }
 };
-const PIPE_ORDER = Object.keys(PIPE);
+/* Explicit, ascending by nominal size, with the DH and LPG variants sitting
+   beside the plain size they are built on.
+
+   NOT Object.keys(PIPE): JavaScript hoists integer-like keys to the front of
+   an object in numeric order, so "1".."6" jumped ahead of every fractional
+   size and the picker read 1,2,3,4,5,6 and only then 1.5, 2.375, 4.5 ... */
+const PIPE_ORDER = ["1","1.25","1.5","1.75","2","2.375","2.375 DH","2.375 LPG",
+                    "2.875 DH","3","3.5","4","4.5","5","6","6.8"];
 
 /* Inputs!AI28:AN38 — polymer master. cost = the live Inputs!J4:J15 price book. */
 const MATERIALS = {
@@ -233,3 +240,14 @@ export const matLabel = key => {
   const k = (key || "").trim();
   return (MATERIALS[k] && MATERIALS[k].display) || k;
 };
+
+/* Inputs!AE2:AE45 — the pressure ladder the workbook offers: 25 psi steps to
+   600, then 50 psi steps. Carried on to 6150, where the ANSI class table
+   (Team Questions H24:J152) stops. Every pressure Specialty RTP has quoted
+   sits on it: 750, 1500, 1900, 2200, 3000. */
+export const PSI_LADDER = (() => {
+  const a = [];
+  for (let p = 200; p <= 600; p += 25) a.push(p);
+  for (let p = 650; p <= 6150; p += 50) a.push(p);
+  return a;
+})();

@@ -4,15 +4,15 @@
 import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
-  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER
-} from "./data.js?v=20261012-1439";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1439";
-import * as DB from "./db.js?v=20261012-1439";
-import { initPages } from "./pages.js?v=20261012-1439";
-import * as PARTSUI from "./partsui.js?v=20261012-1439";
-import * as QUOTESUI from "./quotesui.js?v=20261012-1439";
-import * as MDS from "./mds.js?v=20261012-1439";
-import { optimise } from "./optimise.js?v=20261012-1439";
+  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
+} from "./data.js?v=20261012-1448";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1448";
+import * as DB from "./db.js?v=20261012-1448";
+import { initPages } from "./pages.js?v=20261012-1448";
+import * as PARTSUI from "./partsui.js?v=20261012-1448";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1448";
+import * as MDS from "./mds.js?v=20261012-1448";
+import { optimise } from "./optimise.js?v=20261012-1448";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261012-1439";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1448";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -143,7 +143,7 @@ function renderInputs() {
     field("Application Request","lengthFt","num",{unit:"ft",min:1}),
     derived(" ","d_lengthM",f0(r.lengthM), "m"),
     field("SRTP Pipe Size","sizeKey","select",{opts:PIPE_ORDER,unit:"in"}),
-    field("Pipe Pressure","psi","num",{unit:"psi",min:1}),
+    field("Pipe Pressure","psi","select",{opts:PSI_LADDER,unit:"psi"}),
     derived(" ","d_bar",f0(r.bar), "bar"),
     field("Pipe Temp","degF","select",{opts:TEMPS,unit:"°F"}),
     derived(" ","d_degC",f0(r.degC), "°C"),
@@ -1070,10 +1070,16 @@ document.addEventListener("input", e => {
     I[k] = (e.target.type === "number" || NUMERIC_I.has(k)) ? readNum(e.target, I[k]) : e.target.value;
 
     /* Changing the duty invalidates the braid, so re-solve it. Changing the
-       braid itself does not, which is what keeps manual edits sticking. */
+       braid itself does not, which is what keeps manual edits sticking.
+
+       The re-solve writes the new braid into the existing controls rather
+       than rebuilding the grid. Rebuilding replaced every input mid-edit,
+       so a duty field could not be cleared or freely typed into — the box
+       was recreated from the model on each keystroke. */
     if (AUTO_CFG && DUTY_KEYS.includes(k)) {
       runOptimise(false);
-      recalc({ rebuild: true });
+      syncBraidControls();
+      recalc();
       return;
     }
     recalc();
@@ -1388,3 +1394,14 @@ document.addEventListener("click", e => {
   runOptimise(true);
   recalc({ rebuild: true });
 });
+
+/* Push the optimiser's braid choice into the controls without rebuilding the
+   grid, so whichever field the user is typing in survives untouched. */
+function syncBraidControls() {
+  for (const key of ["xbraid", "pitch", "passes", "longs", "longsQty"]) {
+    const el = document.getElementById("in_" + key);
+    if (el && el !== document.activeElement) el.value = I[key];
+  }
+  const note = document.getElementById("d_opt");
+  if (note) { note.textContent = OPT_NOTE; note.title = OPT_NOTE; }
+}
