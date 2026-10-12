@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1434";
-import { solve } from "./engine.js?v=20261012-1434";
+import * as DB from "./db.js?v=20261012-1439";
+import { solve } from "./engine.js?v=20261012-1439";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -290,7 +290,6 @@ function sheetView() {
         <div><span>Prepared</span><b>${esc(d.prepared_by || "")}</b></div>
         <div><span>Approved</span><b>${esc(d.approved_by || "")}</b></div>
         <div><span>Date</span><b>${esc(d.issued_on || "")}</b></div>
-        <div class="ref">Frozen from the design at save. Figures do not track later changes.</div>
       </footer>
     </article>
   </div>
