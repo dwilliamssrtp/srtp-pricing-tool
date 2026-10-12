@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
-} from "./data.js?v=20261012-1657";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1657";
-import * as DB from "./db.js?v=20261012-1657";
-import { initPages } from "./pages.js?v=20261012-1657";
-import * as PARTSUI from "./partsui.js?v=20261012-1657";
-import * as QUOTESUI from "./quotesui.js?v=20261012-1657";
-import * as MDS from "./mds.js?v=20261012-1657";
-import { optimise, designRules } from "./optimise.js?v=20261012-1657";
+} from "./data.js?v=20261012-1658";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1658";
+import * as DB from "./db.js?v=20261012-1658";
+import { initPages } from "./pages.js?v=20261012-1658";
+import * as PARTSUI from "./partsui.js?v=20261012-1658";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1658";
+import * as MDS from "./mds.js?v=20261012-1658";
+import { optimise, designRules } from "./optimise.js?v=20261012-1658";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261012-1657";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1658";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))

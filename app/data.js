@@ -37,7 +37,8 @@ const PIPE_ORDER = ["1","1.25","1.5","1.75","2","2.375","2.375 DH","2.375 LPG",
 /* Inputs!AI28:AN38 — polymer master. cost = the live Inputs!J4:J15 price book. */
 const MATERIALS = {
   "Nylon - 290":                            { sg:1.13, alt:"Nylon - 290 (Low Temp)",  comp:900,  acr:"PA" },
-  "Nylon - 290Z":                           { sg:1.13, alt:"Nylon - 290Z (hi Temp)",  comp:900,  acr:"PA" },
+  "Nylon - 290Z":                           { sg:1.13, alt:"Nylon - 290Z (hi Temp)",  comp:900,  acr:"PA",
+                                              display:"Nylon HT" },
   "PPS":                                    { sg:1.25, alt:"",  comp:null, acr:"PS" },
   "Admer":                                  { sg:0.92, alt:"Admer (Sweet)",  comp:null, acr:""   },
   "Lotader":                                { sg:0.92, alt:"Lotader (Sour)",  comp:null, acr:""   },

@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode
-} from "./data.js?v=20261012-1657";
+} from "./data.js?v=20261012-1658";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
