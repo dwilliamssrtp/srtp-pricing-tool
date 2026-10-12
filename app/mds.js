@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1409";
-import { solve } from "./engine.js?v=20261012-1409";
+import * as DB from "./db.js?v=20261012-1420";
+import { solve } from "./engine.js?v=20261012-1420";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -55,6 +55,7 @@ function pick(r) {
   const keys = ["productName","sizeKey","psi","bar","degF","degC","lengthFt","lengthM",
     "sour","service","h2s","co2","years","app","apiNominal","mdsSize",
     "liner","bond","backer","jacket","colorMB","base","baseWt","baseOD","specWT",
+    "linerLabel","bondLabel","backerLabel","jacketLabel","colorLabel",
     "skinThk","bondThk","backerThk","linerID","jacketOD","jacketID","jacketThk",
     "jacketWt","colorWt","weightPerFt","xbraid","longsName","longsQty","pitch",
     "pitch2","pitch3","passes","A56","A57","A58","A59","xWt","xWtPerPass","longsWt",
@@ -168,13 +169,13 @@ function sheetView() {
   const base = `
     <table class="mds">
       <thead><tr><th colspan="2">1 &nbsp; Base tube</th>
-        <th>Wall, in</th><th>ID, in</th><th>OD, in</th><th>lbs/ft</th><th>Project lbs</th></tr></thead>
+        <th>Wall, in</th><th>ID, in</th><th>OD, in</th><th>lbs/ft</th><th>Project lbs (ref)</th></tr></thead>
       <tbody>
-        ${layer("1.1", s.liner,  td(f3(s.skinThk)) + td(f3(s.base[0].id)) + td(f3(s.base[0].od))
+        ${layer("1.1", s.linerLabel || s.liner,  td(f3(s.skinThk)) + td(f3(s.base[0].id)) + td(f3(s.base[0].od))
                                  + td(f4(s.base[0].wt)) + td(f0(Math.ceil(s.base[0].wt * s.lengthFt))))}
-        ${layer("1.2", s.bond,   td(f3(s.bondThk)) + td(f3(s.base[1].id)) + td(f3(s.base[1].od))
+        ${layer("1.2", s.bondLabel || s.bond,   td(f3(s.bondThk)) + td(f3(s.base[1].id)) + td(f3(s.base[1].od))
                                  + td(f4(s.base[1].wt)) + td(f0(Math.ceil(s.base[1].wt * s.lengthFt))))}
-        ${layer("1.3", s.backer, td(f3(s.backerThk)) + td(f3(s.base[2].id)) + td(f3(s.baseOD))
+        ${layer("1.3", s.backerLabel || s.backer, td(f3(s.backerThk)) + td(f3(s.base[2].id)) + td(f3(s.baseOD))
                                  + td(f4(s.base[2].wt)) + td(f0(Math.ceil(s.base[2].wt * s.lengthFt))))}
         <tr class="tot"><td></td><td class="ml">Base tube, ovality 0&ndash;5%</td>
           ${td(f3(s.specWT))}${td(f3(s.linerID))}${td(f3(s.baseOD))}
@@ -206,11 +207,11 @@ function sheetView() {
   const cover = `
     <table class="mds">
       <thead><tr><th colspan="2">3 &nbsp; Cover</th>
-        <th>Min wall</th><th>Wall, in</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Project lbs</th></tr></thead>
+        <th>Min wall</th><th>Wall, in</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Project lbs (ref)</th></tr></thead>
       <tbody>
-        ${layer("3.1", s.jacket, td("&ge;0.070") + td(f4(s.jacketThk)) + td(f3(s.jacketOD))
+        ${layer("3.1", s.jacketLabel || s.jacket, td("&ge;0.070") + td(f4(s.jacketThk)) + td(f3(s.jacketOD))
                 + td(f4(s.jacketWt)) + td(f0(Math.ceil(s.jacketWt * s.lengthFt))))}
-        ${layer("3.2", s.colorMB, td("") + td("") + td("")
+        ${layer("3.2", s.colorLabel || s.colorMB, td("") + td("") + td("")
                 + td(f4(s.colorWt)) + td(f0(Math.ceil(s.colorWt * s.lengthFt))))}
         <tr class="tot"><td></td><td class="ml">Finished product</td>
           ${td("")}${td(f4(s.jacketThk))}${td(f3(s.jacketOD))}
@@ -237,7 +238,7 @@ function sheetView() {
     <table class="mds">
       <thead><tr><th colspan="7">5 &nbsp; Print legend</th></tr></thead>
       <tbody>
-        <tr><td class="mn">5.1</td><td class="ml" colspan="6"><span class="cell">${esc(s.printLine1)}</span></td></tr>
+        <tr><td class="mn">5.1</td><td class="ml" colspan="6">${apiMark(s)}<span class="cell">${esc(s.printLine1)}</span></td></tr>
         <tr><td class="mn">5.2</td><td class="ml" colspan="6"><span class="cell">${esc(s.printLine2)}</span></td></tr>
         <tr><td class="mn">5.3</td><td class="ml" colspan="6"><span class="cell">${esc(s.printLine3)}</span></td></tr>
         <tr><td class="mn">5.4</td><td class="ml" colspan="6">Date code is Year Month Day Hour,
@@ -268,17 +269,15 @@ function sheetView() {
 
       <h2 class="prod">${esc(s.productName)}</h2>
 
+      <!-- Design pressure, temperature, service, hydrotest, service life and
+           coupling are deliberately absent: they are design conditions, and
+           the pressure and temperature already read off the product title
+           immediately above. The MDS carries what the floor builds. -->
       <div class="kvrow">
         ${kv("Application", esc(s.app))}
         ${kv("API nominal", f(s.apiNominal, 2) + " in")}
-        ${kv("Service", esc(s.sour) + " " + esc(String(s.service).trim()))}
-        ${kv("Design pressure", f0(s.psi) + " psi / " + f0(s.bar) + " bar")}
-        ${kv("Design temperature", f0(s.degC) + "°C / " + f0(s.degF) + "°F")}
         ${kv("FAT min burst", f0(fat) + " psi")}
-        ${kv("Field hydrotest", f0(s.hydroP) + " psi")}
-        ${kv("Service life", f0(s.years) + " years")}
         ${kv("Length", f0(s.lengthFt) + " ft / " + f0(s.lengthM) + " m")}
-        ${kv("Coupling", esc(s.couplingName || "—"))}
       </div>
       <p class="basis">FAT basis: ${esc(fatLabel)}. Burst achieved ${f0(s.burstTotal)} psi at a
         ${f(s.braidAngle, 1)}&deg; braid angle. Tensile ${f0(s.tensileStrength)} lbs.</p>
@@ -375,3 +374,17 @@ document.addEventListener("change", async e => {
       status("Loaded."); return; }
   } catch (err) { status(err.message, true); }
 });
+
+/* The API 15S monogram that precedes the licence number on the print legend.
+
+   The monogram is API's registered certification mark, so it is NOT drawn
+   here — reproducing a certification mark in code would be passing off
+   artwork that only the licensor issues. Drop the licensed file at
+   assets/api-15s.png and it appears; until then the slot removes itself and
+   the line prints as it always has. Only shown on a 15S line, since LPG and
+   downhole product does not carry the mark. */
+function apiMark(s) {
+  if (!/15S/.test(String(s.printLine1 || ""))) return "";
+  return `<img class="apimark" src="assets/api-15s.png" alt="API 15S"
+            onerror="this.remove()">`;
+}

@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER
-} from "./data.js?v=20261012-1409";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1409";
-import * as DB from "./db.js?v=20261012-1409";
-import { initPages } from "./pages.js?v=20261012-1409";
-import * as PARTSUI from "./partsui.js?v=20261012-1409";
-import * as QUOTESUI from "./quotesui.js?v=20261012-1409";
-import * as MDS from "./mds.js?v=20261012-1409";
-import { optimise } from "./optimise.js?v=20261012-1409";
+} from "./data.js?v=20261012-1420";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1420";
+import * as DB from "./db.js?v=20261012-1420";
+import { initPages } from "./pages.js?v=20261012-1420";
+import * as PARTSUI from "./partsui.js?v=20261012-1420";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1420";
+import * as MDS from "./mds.js?v=20261012-1420";
+import { optimise } from "./optimise.js?v=20261012-1420";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261012-1409";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1420";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -270,16 +270,16 @@ function renderDisplay() {
   document.getElementById("costTbl").innerHTML = tbl(
     ["Layer","lbs/ft","$/lb","$/ft",{t:"Project $",n:1}], [
     {group:"Base tube — Inputs!A34:I38"},
-    L(r.base[0].name, r.base[0].wt, r.base[0].price, r.base[0].cost),
-    L(r.base[1].name, r.base[1].wt, r.base[1].price, r.base[1].cost),
-    L(r.base[2].name, r.base[2].wt, r.base[2].price, r.base[2].cost),
+    L(r.linerLabel, r.base[0].wt, r.base[0].price, r.base[0].cost),
+    L(r.bondLabel, r.base[1].wt, r.base[1].price, r.base[1].cost),
+    L(r.backerLabel, r.base[2].wt, r.base[2].price, r.base[2].cost),
     {group:"Reinforcement — Inputs!A47:I50"},
     L(r.longsName, r.longsWt, r.longsPrice, r.longsCost),
     L(r.xbraid + ` · ${r.passes} pass | ${f(r.pitch)} pitch`, r.xWt, r.xPrice, r.xCost),
     ...(r.is24T ? [L("24-Tensile · "+r.tBraid, r.tWt, r.tPrice, r.tCost)] : []),
     {group:"Jacket — Inputs!A41:I44"},
-    L(r.jacket, r.jacketWt, r.jacketPrice, r.jacketCost),
-    L(r.colorMB, r.colorWt, r.colorPrice, r.colorCost),
+    L(r.jacketLabel, r.jacketWt, r.jacketPrice, r.jacketCost),
+    L(r.colorLabel, r.colorWt, r.colorPrice, r.colorCost),
     {cls:"tot", cells:["Total", {v:f4(r.weightPerFt),n:1}, {v:"",n:1},
       {v:money(r.costPerFt,4),n:1}, {v:money(r.projectCost,0),n:1}]},
     {cls:"tot", cells:[`Sell @ ${pct(r.margin,0)} margin`, {v:"",n:1}, {v:"",n:1},
@@ -318,17 +318,17 @@ function sheetTDS(r) {
     {v:f0(Math.ceil(wt*r.lengthFt))+" lbs",n:1},{v:money(price,3),n:1}];
   const body = tbl(["#","Layer / Material",{t:"Theoretical",n:1},{t:"Project Weight",n:1},{t:"Price ($/lb)",n:1}], [
     {group:"1 · Base"},
-    layer(1, r.base[0].name, r.base[0].wt, r.base[0].price),
-    layer("", r.base[1].name, r.base[1].wt, r.base[1].price),
-    layer("", r.base[2].name, r.base[2].wt, r.base[2].price),
+    layer(1, r.linerLabel, r.base[0].wt, r.base[0].price),
+    layer("", r.bondLabel, r.base[1].wt, r.base[1].price),
+    layer("", r.backerLabel, r.base[2].wt, r.base[2].price),
     {group:"2 · Longitudinal Reinforcement"},
     layer(2, r.longsName, r.longsWt, r.longsPrice),
     {group:"3 · Hoop Reinforcement"},
     layer(3, r.xbraid, r.xWt, r.xPrice),
     ...(r.is24T ? [{group:"3b · 24-Tensile"}, layer("", r.tBraid, r.tWt, r.tPrice)] : []),
     {group:"4 · Jacket"},
-    layer(4, r.jacket, r.jacketWt, r.jacketPrice),
-    layer("", r.colorMB, r.colorWt, r.colorPrice),
+    layer(4, r.jacketLabel, r.jacketWt, r.jacketPrice),
+    layer("", r.colorLabel, r.colorWt, r.colorPrice),
     {cls:"tot",cells:["","Total",{v:f4(r.weightPerFt)+" lbs/ft",n:1},
       {v:f0(Math.ceil(r.weightPerFt*r.lengthFt))+" lbs",n:1},{v:money(r.costPerFt)+"/ft",n:1}]}
   ]);
@@ -363,9 +363,9 @@ function mdsBlock(r, fatBurst, reelHub, cellRef) {
   ]);
   const cv = tbl(["#","Layer",{t:"Weight",n:1},{t:"Min Thick.",n:1},{t:"Thick.",n:1},"Tol.",{t:"OD",n:1},"Tol."], [
     {group:"3 · Cover"},
-    [{v:3,n:1}, r.jacket,{v:f(r.jacketWt*r.lengthFt,1)+" lbs",n:1},{v:"≥0.07",n:1},
+    [{v:3,n:1}, r.jacketLabel,{v:f(r.jacketWt*r.lengthFt,1)+" lbs",n:1},{v:"≥0.07",n:1},
      {v:f4(r.jacketThk),n:1},'±0.01"',{v:f3(r.jacketOD),n:1},'±0.01"'],
-    [{v:"",n:1}, r.colorMB,{v:f(r.colorWt*r.lengthFt,1)+" lbs",n:1},{v:"",n:1},
+    [{v:"",n:1}, r.colorLabel,{v:f(r.colorWt*r.lengthFt,1)+" lbs",n:1},{v:"",n:1},
      {v:"",n:1},"",{v:"",n:1},""]
   ]);
   const minD = r.jacketOD ? reelHub / r.jacketOD : 0;
@@ -441,9 +441,9 @@ function sheetMDS2(r) {
                      {t:"OD (in) ±0.01",n:1},{t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], rows);
   const cover = tbl(["#","Cover",{t:"Wall (in)",n:1},{t:"OD (in) ±0.01",n:1},{t:"ID (in) ±0.01",n:1},
                      {t:"lbs/ft",n:1},{t:"Planned lbs",n:1}], [
-    [{v:3,n:1}, r.jacket,{v:f4(r.jacketThk),n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.jacketID),n:1},
+    [{v:3,n:1}, r.jacketLabel,{v:f4(r.jacketThk),n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.jacketID),n:1},
      {v:f4(r.jacketWt),n:1},{v:f0(Math.ceil(r.jacketWt*r.lengthFt)),n:1}],
-    [{v:"",n:1}, r.colorMB,{v:"",n:1},{v:"",n:1},{v:"",n:1},
+    [{v:"",n:1}, r.colorLabel,{v:"",n:1},{v:"",n:1},{v:"",n:1},
      {v:f4(r.colorWt),n:1},{v:f0(Math.ceil(r.colorWt*r.lengthFt)),n:1}],
     {cls:"tot",cells:[{v:"",n:1},"Finished product",{v:"",n:1},{v:f3(r.jacketOD),n:1},{v:f3(r.linerID),n:1},
       {v:f3(r.weightPerFt),n:1},{v:f0(Math.ceil(r.weightPerFt*r.lengthFt)),n:1}]}

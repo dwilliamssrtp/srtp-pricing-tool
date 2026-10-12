@@ -2,8 +2,8 @@ import {
   PIPE, MATERIALS, BRAID, COUPLING_BY_NAME, COUPLING_HI, COUPLING_LO,
   COUPLING_OD_POST, CDS_FITTINGS, SERVICES, LINER_SWEET, LINER_SOUR,
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
-  BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE
-} from "./data.js?v=20261012-1409";
+  BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel
+} from "./data.js?v=20261012-1420";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -244,7 +244,15 @@ export function solve(inp) {
   o.projectCost  = o.costPerFt  * o.lengthFt;
   o.projectPrice = o.sellPerFt  * o.lengthFt;
   o.projectWeight = o.weightPerFt * o.lengthFt;
-  o.productName = `OD:${o.sizeKey}in ID:${o.linerID}in ${o.psi}psi ${o.degF}°F L${matKey(o.liner)} J${matKey(o.jacket)}`; // G4
+  // Short display names, so supplier wording stays out of the title.
+  o.productName = `OD:${o.sizeKey}in ID:${o.linerID}in ${o.psi}psi ${o.degF}°F `
+                + `L${matLabel(o.liner)} J${matLabel(o.jacket)}`;        // G4
+  // Display forms of each selected material, for the renderers to print.
+  o.linerLabel  = matLabel(o.liner);
+  o.bondLabel   = matLabel(o.bond);
+  o.backerLabel = matLabel(o.backer);
+  o.jacketLabel = matLabel(o.jacket);
+  o.colorLabel  = matLabel(o.colorMB);
   o.idArea = Math.PI * o.linerID;                                       // G12 (sheet uses pi*ID)
 
   /* ---------------- 13. couplings (Inputs!A105:C129, B12) ---------- */

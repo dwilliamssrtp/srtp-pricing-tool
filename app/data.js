@@ -36,7 +36,11 @@ const MATERIALS = {
   "Lotader":                                { sg:0.92, alt:"Lotader (Sour)",  comp:null, acr:""   },
   "PERT":                                   { sg:0.95, alt:"",  comp:800,  acr:"PT" },
   "PP":                                     { sg:0.90, alt:"",  comp:1000, acr:"PP" },
-  "PPUVHSWHHT - WashPenn PreBlended HT PP": { sg:0.96, alt:"", comp:null, acr:"PP" },
+  /* The supplier name is not wanted on a datasheet, so this one carries a
+     short display label. The KEY stays as the workbook wrote it, because the
+     price book, saved designs and quote lines all reference it. */
+  "PPUVHSWHHT - WashPenn PreBlended HT PP": { sg:0.96, alt:"", comp:null, acr:"PP",
+                                              display:"PPUVHSWHHT" },
   "PPMBUVWH - White Color Concentrate":     { sg:0.90, alt:"",  comp:null, acr:""   },
   "PPMBUVYL - Yellow LPG":                  { sg:0.90, alt:"",  comp:null, acr:""   },
   "PVDF (Kynar)":                           { sg:1.87, alt:"", comp:null, acr:"PV" }
@@ -222,3 +226,10 @@ export {
    so the quantity steps in fours. The workbook offers this as a ladder, not
    a free number, which is why the input is a dropdown here too. */
 export const LONGS_LADDER = (() => { const a=[]; for (let q=4; q<=200; q+=4) a.push(q); return a; })();
+
+/* What a material is called on screen and in print. Falls back to the key, so
+   only materials that need a shorter name have to declare one. */
+export const matLabel = key => {
+  const k = (key || "").trim();
+  return (MATERIALS[k] && MATERIALS[k].display) || k;
+};
