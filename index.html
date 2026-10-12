@@ -38,7 +38,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-fo
 .wrap{max-width:1500px;margin:0 auto;padding:0 16px 40px}
 
 /* ---------- header ---------- */
-header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 88%,transparent);
+#app > header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .hd{max-width:1500px;margin:0 auto;padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .brand{display:flex;align-items:center}
@@ -151,7 +151,7 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
   .ig{grid-template-columns:1fr 110px 70px}
 }
 @media print{
-  header{position:static} button,.tabs{display:none}
+  #app > header{position:static} button,.tabs{display:none}
   .panel{display:block!important;border-radius:10px;border-top:1px solid var(--line);page-break-inside:avoid;margin-bottom:14px}
   body{background:#fff;color:#000}
 }
@@ -198,7 +198,7 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 @media print{
   @page{size:letter portrait;margin:0}
   html,body{background:#fff}
-  header,.noprint,#pagenav,.tabs,.savebar,h2.sec{display:none!important}
+  #app > header,.noprint,#pagenav,.tabs,.savebar,h2.sec{display:none!important}
   .wrap{padding:0;max-width:none}
   .sheetwrap{margin:0;display:block}
   .mdsdoc{width:auto;min-height:auto;border:0;border-radius:0;box-shadow:none;
@@ -252,8 +252,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 </div>
 
 <div id="app" hidden>
-</head>
-<body>
 
 <header>
   <div class="hd">
@@ -397,6 +395,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261012-1420"></script>
+<script type="module" src="app/ui.js?v=20261012-1427"></script>
 </body>
 </html>
