@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER
-} from "./data.js?v=20261012-1357";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1357";
-import * as DB from "./db.js?v=20261012-1357";
-import { initPages } from "./pages.js?v=20261012-1357";
-import * as PARTSUI from "./partsui.js?v=20261012-1357";
-import * as QUOTESUI from "./quotesui.js?v=20261012-1357";
-import * as MDS from "./mds.js?v=20261012-1357";
-import { optimise } from "./optimise.js?v=20261012-1357";
+} from "./data.js?v=20261012-1409";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1409";
+import * as DB from "./db.js?v=20261012-1409";
+import { initPages } from "./pages.js?v=20261012-1409";
+import * as PARTSUI from "./partsui.js?v=20261012-1409";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1409";
+import * as MDS from "./mds.js?v=20261012-1409";
+import { optimise } from "./optimise.js?v=20261012-1409";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -22,9 +22,10 @@ let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
 let AUTO_CFG = true;           // re-solve the braid when the duty changes
+let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261012-1357";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1409";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -158,9 +159,14 @@ function renderInputs() {
     `<label for="autoCfg">Auto-configure</label>
      <label class="ref" style="grid-column:2/-1;display:flex;gap:7px;align-items:center">
        <input id="autoCfg" type="checkbox"${AUTO_CFG ? " checked" : ""} style="width:auto">
-       cheapest braid that passes
+       on duty change
        <button id="optBtn" style="margin-left:auto;padding:3px 9px">Optimise now</button>
      </label>`,
+    `<label for="autoMode">Optimise for</label>
+     <select id="autoMode" style="grid-column:2/-1">
+       <option value="cheapest"${AUTO_MODE === "cheapest" ? " selected" : ""}>Cheapest $/ft</option>
+       <option value="fewest_passes"${AUTO_MODE === "fewest_passes" ? " selected" : ""}>Easiest to make &mdash; fewest passes</option>
+     </select>`,
     `<label>&nbsp;</label><div class="derived" id="d_opt" style="grid-column:2/-1"
        title="${esc(OPT_NOTE)}">${esc(OPT_NOTE)}</div>`,
     field("X-braid (hoop)","xbraid","select",{opts:XBRAIDS}),
@@ -1277,6 +1283,8 @@ async function enterApp(profile) {
 
 async function boot() {
   load();
+  try { const m = localStorage.getItem(LS + "-automode");
+        if (m === "cheapest" || m === "fewest_passes") AUTO_MODE = m; } catch (e) {}
   try { const th = localStorage.getItem(LS + "-theme");
         if (th) document.documentElement.setAttribute("data-theme", th); } catch (e) {}
 
@@ -1322,9 +1330,7 @@ boot();
 const DUTY_KEYS = ["sizeKey", "psi", "degF", "sour", "service", "years", "app"];
 
 function runOptimise(announce) {
-  const base = { ...I };
-  DUTY_KEYS.forEach(() => {});                 // duty comes from I as-is
-  const res = optimise(base, PRICES);
+  const res = optimise({ ...I }, PRICES, { objective: AUTO_MODE });
   if (res.best) {
     Object.assign(I, {
       xbraid:  res.best.inputs.xbraid,
@@ -1334,8 +1340,25 @@ function runOptimise(announce) {
       longsQty:res.best.inputs.longsQty
     });
     const w = res.best.warnings.length ? ` — ${res.best.warnings.join("; ")}` : "";
-    OPT_NOTE = `Cheapest that passes: ${money(res.best.costPerFt)}/ft, `
-             + `${f0(res.best.burst)} psi burst${w}. ${res.tried.length} options, ${res.elapsedMs} ms.`;
+    const lead = AUTO_MODE === "fewest_passes"
+      ? `Easiest: ${res.best.inputs.passes} pass${res.best.inputs.passes > 1 ? "es" : ""}, `
+        + `${money(res.best.costPerFt)}/ft`
+      : `Cheapest: ${money(res.best.costPerFt)}/ft, ${res.best.inputs.passes} pass`
+        + `${res.best.inputs.passes > 1 ? "es" : ""}`;
+
+    /* Name the trade-off only when the two objectives actually disagree, so
+       the premium for an easier build is visible rather than implied. */
+    const other = AUTO_MODE === "fewest_passes" ? res.cheapest : res.fewestPasses;
+    let diff = "";
+    if (other && other.inputs.passes !== res.best.inputs.passes) {
+      const gap = Math.abs(other.costPerFt - res.best.costPerFt);
+      diff = AUTO_MODE === "fewest_passes"
+        ? ` Cheapest would be ${other.inputs.passes} passes at ${money(other.costPerFt)}/ft, `
+          + `${money(gap)}/ft less.`
+        : ` Fewest passes would be ${other.inputs.passes} at ${money(other.costPerFt)}/ft, `
+          + `${money(gap)}/ft more.`;
+    }
+    OPT_NOTE = `${lead}, ${f0(res.best.burst)} psi burst${w}.${diff}`;
   } else if (res.nearest) {
     OPT_NOTE = `No configuration passes. Closest is ${res.nearest.inputs.xbraid}, `
              + `${res.nearest.inputs.longsQty} longs — ${res.nearest.blockers.join("; ")}.`;
@@ -1347,9 +1370,17 @@ function runOptimise(announce) {
 }
 
 document.addEventListener("change", e => {
-  if (e.target.id !== "autoCfg") return;
-  AUTO_CFG = e.target.checked;
-  if (AUTO_CFG) { runOptimise(false); recalc({ rebuild: true }); }
+  if (e.target.id === "autoCfg") {
+    AUTO_CFG = e.target.checked;
+    if (AUTO_CFG) { runOptimise(false); recalc({ rebuild: true }); }
+    return;
+  }
+  if (e.target.id === "autoMode") {
+    AUTO_MODE = e.target.value;
+    try { localStorage.setItem(LS + "-automode", AUTO_MODE); } catch (err) {}
+    runOptimise(false);
+    recalc({ rebuild: true });
+  }
 });
 document.addEventListener("click", e => {
   if (!e.target.closest("#optBtn")) return;

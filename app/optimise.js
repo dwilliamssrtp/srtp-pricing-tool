@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261012-1357";
-import { solve } from "./engine.js?v=20261012-1357";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261012-1409";
+import { solve } from "./engine.js?v=20261012-1409";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -103,7 +103,7 @@ export const optimiserLongs  = () => LONGS.filter(b => !OPTIMISER_SKIPS.test(b))
 export function optimise(base, prices, opts = {}) {
   const t0 = performance.now();
   const maxPasses = opts.maxPasses ?? 3;
-  let considered = 0, best = null, nearest = null;
+  let considered = 0, nearest = null;
   const tried = [];
 
   for (const xbraid of optimiserBraids()) {
@@ -133,19 +133,43 @@ export function optimise(base, prices, opts = {}) {
           continue;
         }
         tried.push(row);
-        if (!best || rank(row, best) < 0) best = row;
       }
     }
   }
-  tried.sort(rank);
-  return { best, nearest: best ? null : nearest, tried: tried.slice(0, 8), considered,
-           elapsedMs: Math.round(performance.now() - t0) };
+
+  /* Both rankings come off the same search, so the UI can show what the
+     chosen objective costs against the other without searching twice. */
+  const byCost   = [...tried].sort(rankCheapest);
+  const byPasses = [...tried].sort(rankFewestPasses);
+  const objective = opts.objective === "fewest_passes" ? "fewest_passes" : "cheapest";
+  const best = (objective === "fewest_passes" ? byPasses : byCost)[0] || null;
+
+  return {
+    best, objective,
+    cheapest:     byCost[0]   || null,
+    fewestPasses: byPasses[0] || null,
+    nearest: best ? null : nearest,
+    tried: (objective === "fewest_passes" ? byPasses : byCost).slice(0, 8),
+    considered,
+    elapsedMs: Math.round(performance.now() - t0)
+  };
 }
 
-/* A design with no soft warnings beats one that has them; after that the
+/* Cheapest: a design with no soft warnings beats one that has them, then the
    cheaper wins. Ranking rather than filtering means a workable-but-flagged
    configuration is still offered when nothing clean exists. */
-function rank(a, b) {
+function rankCheapest(a, b) {
+  if (a.clean !== b.clean) return a.clean ? -1 : 1;
+  return a.costPerFt - b.costPerFt;
+}
+
+/* Fewest passes: easiest to make, cost second. Pass count leads here rather
+   than cleanliness, because a one-pass design carrying a soft warning is
+   still the simpler thing to run than a clean two-pass one — which is the
+   whole point of asking for this objective. Within a pass count, clean wins,
+   then cheaper. */
+function rankFewestPasses(a, b) {
+  if (a.inputs.passes !== b.inputs.passes) return a.inputs.passes - b.inputs.passes;
   if (a.clean !== b.clean) return a.clean ? -1 : 1;
   return a.costPerFt - b.costPerFt;
 }
