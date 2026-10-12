@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1540";
-import { solve } from "./engine.js?v=20261012-1540";
+import * as DB from "./db.js?v=20261012-1549";
+import { solve } from "./engine.js?v=20261012-1549";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -269,13 +269,13 @@ function sheetView() {
 
       <h2 class="prod">${esc(s.productName)}</h2>
 
-      <!-- Design pressure, temperature, service, hydrotest, service life and
-           coupling are deliberately absent: they are design conditions, and
-           the pressure and temperature already read off the product title
-           immediately above. The MDS carries what the floor builds. -->
+      <!-- Design pressure, temperature, service, hydrotest, service life,
+           coupling and API nominal are deliberately absent: they are design
+           conditions, and the pressure and temperature already read off the
+           product title immediately above. The MDS carries what the floor
+           builds. API nominal is on the Designer's headline instead. -->
       <div class="kvrow">
         ${kv("Application", esc(s.app))}
-        ${kv("API nominal", f(s.apiNominal, 2) + " in")}
         ${kv("FAT min burst", f0(fat) + " psi")}
         ${kv("Length", f0(s.lengthFt) + " ft / " + f0(s.lengthM) + " m")}
       </div>
