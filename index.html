@@ -187,7 +187,10 @@ table.mds td.mn{width:30px;text-align:left;color:#777;font-family:var(--mono)}
 table.mds td.ml{text-align:left}
 table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 .mdsdoc .cell{font-family:var(--mono);font-size:9px}
-.apimark{height:13px;width:auto;vertical-align:-2px;margin-right:5px}
+/* The API monogram is portrait (307x452), so height drives the size and the
+   width follows. 20px keeps the diamond legible beside 9.5px legend text
+   without pushing the row out of the one-page budget. */
+.apimark{height:20px;width:auto;vertical-align:middle;margin-right:6px}
 .mdsdoc p.notes{font-size:9.5px;margin:4px 0 0}
 .mdsfoot{display:grid;grid-template-columns:repeat(3,1fr) 2fr;gap:12px;align-items:end;
   margin-top:14px;padding-top:8px;border-top:1px solid #c8ccd0;font-size:9px}
@@ -395,6 +398,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261012-1427"></script>
+<script type="module" src="app/ui.js?v=20261012-1434"></script>
 </body>
 </html>

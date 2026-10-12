@@ -2,15 +2,15 @@
 
 ## api-15s.png
 
-The API 15S monogram shown before the licence number on the MDS print legend.
+The API monogram printed before the licence number on the MDS print legend
+(line 5.1). Supplied by Specialty RTP as the API 15S licensee — 307 x 452 px,
+transparent PNG, rendered at 20 px tall.
 
-**This file is intentionally absent.** The API monogram is a registered
-certification mark issued to licensees by the American Petroleum Institute —
-it is not something to recreate from scratch, so no substitute artwork has
-been drawn here.
+The monogram is the American Petroleum Institute's registered certification
+mark. It is reproduced here from licensed artwork, never redrawn: if this file
+needs replacing, use the artwork API issues to the licence holder rather than
+tracing or regenerating it.
 
-Drop your licensed artwork at `assets/api-15s.png` and push. The sheet picks
-it up automatically; until it exists the slot removes itself and the print
-line renders unchanged.
-
-A transparent PNG about 60 px tall reproduces cleanly at the 13 px print size.
+The sheet references it by path. If the file is missing the slot removes
+itself and the legend prints unchanged, so a broken image never reaches a
+customer document. It only appears on 15S lines, not LPG or downhole product.
