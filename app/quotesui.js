@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1602";
-import { solve } from "./engine.js?v=20261012-1602";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261012-1602";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261012-1602";
+import * as DB from "./db.js?v=20261012-1609";
+import { solve } from "./engine.js?v=20261012-1609";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261012-1609";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261012-1609";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -53,6 +53,36 @@ const quoteSettings = q => ({
 });
 const stagesFor = size => SPEEDS.filter(s => String(s.rtp_size) === String(size));
 
+/* A quote line priced off a master cost-sheet row. list_price wins when the
+   sheet carries one; otherwise cost x (1 + markup). A row with no cost gives
+   nulls rather than zeros, so it shows as "not set" and trips the placeholder
+   warning instead of quietly pricing at nothing. */
+function pricedFromPart(part, qty, unit, markup) {
+  return {
+    unit_cost: part ? (part.cost == null ? null : Number(part.cost)) : null,
+    unit_price: part && part.list_price != null ? Number(part.list_price)
+              : (part && part.cost != null ? Number(part.cost) * (1 + markup) : null),
+    cost_is_placeholder: !!(part && part.is_placeholder),
+    supplied_units: qty, manufactured_units: qty, unit
+  };
+}
+
+const PART_KIND_LABEL = { end_flange: "End flanges", lap_flange: "Lap flanges",
+                          splice: "Splices", reel: "Reels", support: "Support items" };
+
+/* Every row of the master cost sheet, grouped by kind. Deliberately NOT
+   filtered by the group's pipe size: the whole point is being able to put a
+   6in ANSI 600 splice, a different reel or a support item on a 4in group. */
+const partOptions = () => ["end_flange", "lap_flange", "splice", "reel", "support"]
+  .map(k => {
+    const rows = PARTS.filter(p => p.kind === k);
+    if (!rows.length) return "";
+    return `<optgroup label="${H.esc(PART_KIND_LABEL[k])}">`
+         + rows.map(p => `<option value="${H.esc(p.id)}">${H.esc(p.label)}`
+             + `${p.cost == null ? " — no cost yet" : ""}</option>`).join("")
+         + `</optgroup>`;
+  }).join("");
+
 /* --------------------------------------------------------------------
    Build the five lines for a pipe size from a saved design.
    -------------------------------------------------------------------- */
@@ -66,13 +96,7 @@ export function groupFromDesign(design, { groupNo, suppliedFt, connectionMateria
   const reels = capacity ? Math.ceil(suppliedFt / capacity) : 0;
 
   const look = (kind, extra) => DB.findPart(PARTS, { kind, ...extra });
-  const priced = (part, qty, unit) => ({
-    unit_cost: part ? (part.cost == null ? null : Number(part.cost)) : null,
-    unit_price: part && part.list_price != null ? Number(part.list_price)
-              : (part && part.cost != null ? Number(part.cost) * (1 + markup) : null),
-    cost_is_placeholder: !!(part && part.is_placeholder),
-    supplied_units: qty, manufactured_units: qty, unit
-  });
+  const priced = (part, qty, unit) => pricedFromPart(part, qty, unit, markup);
 
   const endPart = p && look("end_flange", { rtpSize: sizeKey, ansiClass: p.ansiClass,
                                             material: matShort(connectionMaterial) });
@@ -351,7 +375,16 @@ function editorPage() {
              {t:"Extended",n:1},{t:"Unit cost",n:1},{t:"Budget",n:1},{t:"Margin",n:1}], rows)
       + `<p class="ref">${labTxt} &middot; group total ${money(g.extended,0)},
          budget ${money(g.budget,0)}, margin ${g.margin==null?"—":(g.margin*100).toFixed(1)+"%"},
-         true margin ${g.trueMargin==null?"—":(g.trueMargin*100).toFixed(1)+"%"}</p>`;
+         true margin ${g.trueMargin==null?"—":(g.trueMargin*100).toFixed(1)+"%"}</p>`
+      + `<div class="savebar">
+          <select id="agl-${g.groupNo}" style="flex:1 1 300px">
+            <option value="">&mdash; add a line from the cost sheet &mdash;</option>
+            ${partOptions()}
+          </select>
+          <input id="aglq-${g.groupNo}" type="number" min="1" step="1" value="1"
+            title="Quantity" style="width:80px;text-align:right">
+          <button data-addline="${g.groupNo}">Add line</button>
+        </div>`;
   }).join("");
 
   const adder = `
@@ -472,6 +505,7 @@ document.addEventListener("click", async e => {
   const openq = t("[data-openq]"), arch = t("[data-arch]"), unarch = t("[data-unarch]"),
         delq = t("[data-delq]"), addg = t("[data-addgroup]"), rmg = t("[data-rmg]"),
         rml = t("[data-rml]"),
+        addl = t("[data-addline]"),
         qfrom = t("[data-quotefrom]");
 
   try {
@@ -522,6 +556,28 @@ document.addEventListener("click", async e => {
       H.refresh();
       status(before === CUR.lines.length ? "Nothing removed."
                                          : "Line removed — Save to keep it.");
+      return;
+    }
+
+    /* Any cost-sheet row can be added to any group, whatever the pipe size.
+       The new line takes the next free sort in that group, which keeps the
+       per-line edit and remove handles (keyed group:sort) unique. */
+    if (addl) {
+      const gno  = addl.dataset.addline;
+      const sel  = document.getElementById("agl-" + gno);
+      const qBox = document.getElementById("aglq-" + gno);
+      const part = PARTS.find(p => String(p.id) === String(sel && sel.value));
+      if (!part) { status("Pick a part from the cost sheet first.", true); return; }
+      const qty = Math.max(1, Math.round(Number(qBox && qBox.value) || 1));
+      const st  = quoteSettings(CUR);
+      const sort = CUR.lines.filter(l => String(l.group_no) === String(gno))
+                            .reduce((m, l) => Math.max(m, Number(l.sort) || 0), 0) + 1;
+      CUR.lines.push({
+        group_no: Number(gno), sort, kind: part.kind, label: part.label,
+        ...pricedFromPart(part, qty, /ft/i.test(part.unit || "") ? "ft" : "ea", st.markup)
+      });
+      H.refresh();
+      status(`Added ${part.label} — Save to keep it.`);
       return;
     }
 
