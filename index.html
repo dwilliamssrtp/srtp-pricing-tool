@@ -89,6 +89,11 @@ h2.sec{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--
 /* Design-rule checklist beside the optimiser. Passing rules recede to muted
    grey so the eye lands on the ones that failed. Deliberately NOT .derived,
    which clamps to one ellipsised line. */
+/* Strike a single line from a quote. Quiet until hovered, so eight of them
+   down a group do not shout. */
+.rmln{padding:0 5px;line-height:1.15;font-size:12px;color:var(--ink3);
+  background:none;border:1px solid transparent;border-radius:4px}
+.rmln:hover{color:var(--bad);border-color:var(--bad)}
 .chk{grid-column:1/-1;display:grid;gap:1px;padding:5px 8px 6px;background:var(--bg2);
   border:1px dashed var(--line2);border-radius:6px;margin:3px 0}
 .chk .cap{font-size:10px;text-transform:uppercase;letter-spacing:.12em;
@@ -415,6 +420,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261012-1552"></script>
+<script type="module" src="app/ui.js?v=20261012-1602"></script>
 </body>
 </html>

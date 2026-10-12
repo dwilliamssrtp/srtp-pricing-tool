@@ -15,7 +15,7 @@
    not 50%. That is the workbook's intent, not a rounding error.
    ===================================================================== */
 
-import { labourDays } from "./parts.js?v=20261012-1552";
+import { labourDays } from "./parts.js?v=20261012-1602";
 
 const n = v => (v === null || v === undefined || Number.isNaN(Number(v)) ? 0 : Number(v));
 
@@ -109,7 +109,12 @@ export function salesQuoteView(groups) {
     const end = g.rows.find(r => r.kind === "end_flange");
     const lap = g.rows.find(r => r.kind === "lap_flange");
     for (const r of g.rows) {
-      if (r.kind === "lap_flange") continue;              // folded into the end flange
+      /* Fold the lap into the end flange - but only when there IS one. Lines
+         can be struck from a quote (a splice already in inventory, a flange
+         the customer supplies), and with the end flange gone the lap has
+         nothing to fold into: skipping it would drop it from the customer's
+         sheet AND from the group total. It stands on its own line instead. */
+      if (r.kind === "lap_flange" && end) continue;
       if (r.kind === "end_flange" && lap) {
         const price = (r.price ?? 0) + (lap.price ?? 0);
         out.push({ ...r, price, extended: price * r.supplied, foldedLap: lap.label });
@@ -117,7 +122,6 @@ export function salesQuoteView(groups) {
         out.push(r);
       }
     }
-    void end;
     return { groupNo: g.groupNo, rows: out,
              extended: out.reduce((s, r) => s + (r.extended ?? 0), 0) };
   });

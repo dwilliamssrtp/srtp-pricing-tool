@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1552";
-import { solve } from "./engine.js?v=20261012-1552";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261012-1552";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261012-1552";
+import * as DB from "./db.js?v=20261012-1602";
+import { solve } from "./engine.js?v=20261012-1602";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261012-1602";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261012-1602";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -293,7 +293,13 @@ function editorPage() {
 
   const groups = T.groups.map(g => {
     const rows = g.rows.map(r => ({ cells: [
-      r.label,
+      /* Any PART line can be struck out - a splice already in inventory, a
+         reel the customer supplies. The pipe line is the group's anchor
+         (margin, labour and the price history all key off it), so it carries
+         no x of its own; remove the whole group from its heading instead. */
+      r.kind === "pipe" ? r.label
+        : { v: `${esc(r.label)} <button class="rmln" data-rml="${g.groupNo}:${r.sort}"
+                 title="Remove this line from the quote">&times;</button>`, raw:true },
       { v: `<input class="qln" data-id="${esc(r.id ?? r.sort + "-" + g.groupNo)}"
              data-g="${g.groupNo}" data-s="${r.sort}" data-f="supplied_units" type="number"
              step="1" min="0" value="${r.supplied}" style="width:96px;text-align:right">`, n:1, raw:true },
@@ -465,6 +471,7 @@ document.addEventListener("click", async e => {
   const t = id => e.target.closest(id);
   const openq = t("[data-openq]"), arch = t("[data-arch]"), unarch = t("[data-unarch]"),
         delq = t("[data-delq]"), addg = t("[data-addgroup]"), rmg = t("[data-rmg]"),
+        rml = t("[data-rml]"),
         qfrom = t("[data-quotefrom]");
 
   try {
@@ -502,6 +509,20 @@ document.addEventListener("click", async e => {
     if (rmg) {
       CUR.lines = CUR.lines.filter(l => String(l.group_no) !== String(rmg.dataset.rmg));
       H.refresh(); status("Group removed — Save to keep it."); return;
+    }
+
+    /* Like the group remove, this only edits the in-memory quote: Save
+       rewrites every line, so a mistaken removal is undone by reopening the
+       quote without saving. */
+    if (rml) {
+      const [gno, srt] = rml.dataset.rml.split(":");
+      const before = CUR.lines.length;
+      CUR.lines = CUR.lines.filter(l =>
+        !(String(l.group_no) === gno && String(l.sort) === srt));
+      H.refresh();
+      status(before === CUR.lines.length ? "Nothing removed."
+                                         : "Line removed — Save to keep it.");
+      return;
     }
 
     /* Start a quote straight from a saved design on the Quotes landing page.
