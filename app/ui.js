@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
-} from "./data.js?v=20261012-1448";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1448";
-import * as DB from "./db.js?v=20261012-1448";
-import { initPages } from "./pages.js?v=20261012-1448";
-import * as PARTSUI from "./partsui.js?v=20261012-1448";
-import * as QUOTESUI from "./quotesui.js?v=20261012-1448";
-import * as MDS from "./mds.js?v=20261012-1448";
-import { optimise } from "./optimise.js?v=20261012-1448";
+} from "./data.js?v=20261012-1503";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1503";
+import * as DB from "./db.js?v=20261012-1503";
+import { initPages } from "./pages.js?v=20261012-1503";
+import * as PARTSUI from "./partsui.js?v=20261012-1503";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1503";
+import * as MDS from "./mds.js?v=20261012-1503";
+import { optimise } from "./optimise.js?v=20261012-1503";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261012-1448";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1503";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -1336,7 +1336,15 @@ boot();
 const DUTY_KEYS = ["sizeKey", "psi", "degF", "sour", "service", "years", "app"];
 
 function runOptimise(announce) {
-  const res = optimise({ ...I }, PRICES, { objective: AUTO_MODE });
+  const res = optimise({ ...I }, PRICES, {
+    objective:   AUTO_MODE,
+    stages:      PARTSUI.stagesFor(I.sizeKey),
+    dayCost:     PARTSUI.settingValue("day_cost"),
+    hoursPerDay: PARTSUI.settingValue("hours_per_day")
+  });
+  /* Rank and report on the same basis the search used: delivered cost where
+     stage rates exist for the size, material cost where they do not. */
+  const basis = row => row.lineCostPerFt === null ? row.costPerFt : row.totalCostPerFt;
   if (res.best) {
     Object.assign(I, {
       xbraid:  res.best.inputs.xbraid,
@@ -1346,23 +1354,33 @@ function runOptimise(announce) {
       longsQty:res.best.inputs.longsQty
     });
     const w = res.best.warnings.length ? ` — ${res.best.warnings.join("; ")}` : "";
+    const pl = n => `${n} pass${n > 1 ? "es" : ""}`;
+    const split = res.best.lineCostPerFt === null ? ""
+      : ` (yarn ${money(res.best.costPerFt)} + line ${money(res.best.lineCostPerFt)})`;
     const lead = AUTO_MODE === "fewest_passes"
-      ? `Easiest: ${res.best.inputs.passes} pass${res.best.inputs.passes > 1 ? "es" : ""}, `
-        + `${money(res.best.costPerFt)}/ft`
-      : `Cheapest: ${money(res.best.costPerFt)}/ft, ${res.best.inputs.passes} pass`
-        + `${res.best.inputs.passes > 1 ? "es" : ""}`;
+      ? `Easiest: ${pl(res.best.inputs.passes)}, ${money(basis(res.best))}/ft${split}`
+      : `Cheapest to make: ${money(basis(res.best))}/ft${split}, `
+        + `${pl(res.best.inputs.passes)}`;
 
     /* Name the trade-off only when the two objectives actually disagree, so
        the premium for an easier build is visible rather than implied. */
     const other = AUTO_MODE === "fewest_passes" ? res.cheapest : res.fewestPasses;
     let diff = "";
     if (other && other.inputs.passes !== res.best.inputs.passes) {
-      const gap = Math.abs(other.costPerFt - res.best.costPerFt);
+      /* Say "more" or "less" from the actual sign, not from the mode. The
+         cheapest objective can legitimately land on a DEARER design than the
+         fewest-passes one, because a clean design outranks a flagged one: at
+         2.375in / 1500psi / 185F the one-pass 15-3 is 19c/ft cheaper but runs
+         under the minimum pitch, so the search passes it over. Wording it by
+         mode claimed that cheaper alternative cost more. */
+      const d = basis(other) - basis(res.best);
+      const why = other.warnings.length && d < 0
+        ? ` but ${other.warnings.join("; ")}` : "";
       diff = AUTO_MODE === "fewest_passes"
-        ? ` Cheapest would be ${other.inputs.passes} passes at ${money(other.costPerFt)}/ft, `
-          + `${money(gap)}/ft less.`
-        : ` Fewest passes would be ${other.inputs.passes} at ${money(other.costPerFt)}/ft, `
-          + `${money(gap)}/ft more.`;
+        ? ` Cheapest would be ${pl(other.inputs.passes)} at ${money(basis(other))}/ft, `
+          + `${money(Math.abs(d))}/ft ${d < 0 ? "less" : "more"}${why}.`
+        : ` Fewest passes would be ${other.inputs.passes} at ${money(basis(other))}/ft, `
+          + `${money(Math.abs(d))}/ft ${d < 0 ? "less" : "more"}${why}.`;
     }
     OPT_NOTE = `${lead}, ${f0(res.best.burst)} psi burst${w}.${diff}`;
   } else if (res.nearest) {

@@ -3,7 +3,7 @@ import {
   COUPLING_OD_POST, CDS_FITTINGS, SERVICES, LINER_SWEET, LINER_SOUR,
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel
-} from "./data.js?v=20261012-1448";
+} from "./data.js?v=20261012-1503";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -30,6 +30,12 @@ function vlookupApprox(key, pairs) {
   return hit;
 }
 export const matKey = n => (n || "").trim();
+
+/* Temperature fixes the yarn family: the stress-rupture slope is only
+   published for Twaron at or below 65°C (Inputs!B82) and for Technora
+   above it. degC is ROUNDDOWN((degF-32)*5/9), so 150°F lands on 65 and
+   still takes Twaron, while 185°F and up require Technora. */
+export const requiredYarnType = degC => degC <= 65 ? "Twaron (KN)" : "Technora (TN)";
 function mat(name, prices) {
   const k = matKey(name);
   const m = MATERIALS[k];
@@ -170,7 +176,8 @@ export function solve(inp) {
           + (o.xWt/o.totWt)*1.25 + (o.longsWt/o.totWt)*1.25;            // J50 (braid SG = 1.25)
 
   /* ---------------- 8. stress rupture (Inputs!A78:B101) ------------- */
-  o.yarnType = BX.type || "";                                           // B81
+  o.yarnType     = BX.type || "";                                       // B81
+  o.reqYarnType  = requiredYarnType(o.degC);
   if (o.degC <= 65) {
     o.slope = o.yarnType === "Twaron (KN)" ? 0.03539 : null;            // B82
     if (o.slope === null) warn.push("At ≤65°C the stress-rupture slope requires a Twaron (KN) X-braid — the sheet returns \"WRONG BRAID USE TN\".");
@@ -178,6 +185,16 @@ export function solve(inp) {
     o.slope = o.yarnType === "Technora (TN)" ? 0.0242 : null;
     if (o.slope === null) warn.push("Above 65°C the stress-rupture slope requires a Technora (TN) X-braid (Inputs!B82).");
   }
+  /* The same family restriction binds the LONGS, which v7 never checked
+     because its longs were always picked by hand to match the braid. They
+     carry sustained tensile load at the same temperature, so Twaron longs
+     in a 105°C pipe creep exactly as a Twaron braid would. Reported
+     separately from `slope`, which is a property of the X-braid. */
+  o.longsYarnType = BL.type || "";
+  o.longsFamilyOK = !o.longsYarnType || o.longsYarnType === o.reqYarnType;
+  if (!o.longsFamilyOK)
+    warn.push(`${o.degC <= 65 ? "At ≤65" : "Above 65"}°C the longs must be `
+            + `${o.reqYarnType}, not ${o.longsYarnType}.`);
   const sl = o.slope || 0.0242;
   o.hours        = o.years * 365 * 24;                                  // C84
   o.logRefP      = 2.5951 - sl * Math.log10(o.hours);                   // B83
