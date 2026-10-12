@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261012-1533";
-import { solve, requiredYarnType } from "./engine.js?v=20261012-1533";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261012-1540";
+import { solve, requiredYarnType } from "./engine.js?v=20261012-1540";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -32,19 +32,45 @@ import { solve, requiredYarnType } from "./engine.js?v=20261012-1533";
    sheet as information, not enforced, so treating them as hard would
    reject the very design the business ships. The optimiser still prefers
    a configuration with no soft warnings over a cheaper one with them. */
+export function designRules(r) {
+  const yarn = t => (String(t || "").match(/\(([^)]+)\)/) || [, ""])[1] || "—";
+  return [
+    { label: "Yarn family", hard: true, fmt: "text",
+      ok: r.slope !== null, got: yarn(r.yarnType), need: yarn(r.reqYarnType),
+      msg: "yarn family wrong for the temperature" },
+    { label: "Longs family", hard: true, fmt: "text",
+      ok: r.longsFamilyOK !== false, got: yarn(r.longsYarnType), need: yarn(r.reqYarnType),
+      msg: "longs yarn family wrong for the temperature" },
+    { label: "Design burst (0.67 SF)", hard: true, fmt: "int", unit: "psi", cmp: "≥",
+      ok: r.burstTotal >= r.targetBurstR, got: r.burstTotal, need: r.targetBurstR,
+      msg: "below the 0.67 SF design burst" },
+    { label: "API minimum burst", hard: true, fmt: "int", unit: "psi", cmp: "≥",
+      ok: r.burstTotal >= r.minBurst, got: r.burstTotal, need: r.minBurst,
+      msg: "below the API minimum burst" },
+    { label: "Longs strain", hard: true, fmt: "pct", cmp: "<",
+      ok: r.strainRatio < 0.35, got: r.strainRatio, need: 0.35,
+      msg: "longs strain ratio at or above 35%" },
+    { label: "Coupling retention", hard: true, fmt: "pct", cmp: "<",
+      ok: r.fiberRatio < 0.30, got: r.fiberRatio, need: 0.30,
+      msg: "coupling retention at or above 30%" },
+    { label: "Jacket wall", hard: true, fmt: "in", unit: "in", cmp: "≥",
+      ok: !(r.jacketThk < 0.07), got: r.jacketThk, need: 0.07,
+      msg: "jacket wall below the 0.07 in minimum" },
+    { label: "Pitch vs braid width", hard: false, fmt: "in", unit: "in", cmp: "≥",
+      ok: !(r.pitch < r.minPitch - 1e-9), got: r.pitch, need: r.minPitch,
+      msg: "pitch under the braid-width minimum" },
+    { label: "Braid angle", hard: false, fmt: "deg", cmp: "≥",
+      ok: !(r.braidAngle < 57.3), got: r.braidAngle, need: 57.3,
+      msg: "braid angle under 57.3 deg" },
+    { label: "Longs fit circumference", hard: false, fmt: "int", unit: "ea", cmp: "≤",
+      ok: !(r.longsQty > r.maxLongs), got: r.longsQty, need: r.maxLongs,
+      msg: "more longs than the circumference fits" }
+  ];
+}
+
 export function checkDesign(r) {
   const hard = [], soft = [];
-  if (r.slope === null)              hard.push("yarn family wrong for the temperature");
-  if (r.longsFamilyOK === false)     hard.push("longs yarn family wrong for the temperature");
-  if (r.burstTotal < r.targetBurstR) hard.push("below the 0.67 SF design burst");
-  if (r.burstTotal < r.minBurst)     hard.push("below the API minimum burst");
-  if (!(r.strainRatio < 0.35))       hard.push("longs strain ratio at or above 35%");
-  if (!(r.fiberRatio < 0.30))        hard.push("coupling retention at or above 30%");
-  if (r.jacketThk < 0.07)            hard.push("jacket wall below the 0.07 in minimum");
-
-  if (r.pitch < r.minPitch - 1e-9)   soft.push("pitch under the braid-width minimum");
-  if (r.braidAngle < 57.3)           soft.push("braid angle under 57.3 deg");
-  if (r.longsQty > r.maxLongs)       soft.push("more longs than the circumference fits");
+  for (const d of designRules(r)) if (!d.ok) (d.hard ? hard : soft).push(d.msg);
   return { ok: hard.length === 0, hard, soft, clean: hard.length === 0 && soft.length === 0 };
 }
 
