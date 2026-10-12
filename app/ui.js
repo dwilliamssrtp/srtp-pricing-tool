@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
-} from "./data.js?v=20261012-1509";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1509";
-import * as DB from "./db.js?v=20261012-1509";
-import { initPages } from "./pages.js?v=20261012-1509";
-import * as PARTSUI from "./partsui.js?v=20261012-1509";
-import * as QUOTESUI from "./quotesui.js?v=20261012-1509";
-import * as MDS from "./mds.js?v=20261012-1509";
-import { optimise } from "./optimise.js?v=20261012-1509";
+} from "./data.js?v=20261012-1525";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261012-1525";
+import * as DB from "./db.js?v=20261012-1525";
+import { initPages } from "./pages.js?v=20261012-1525";
+import * as PARTSUI from "./partsui.js?v=20261012-1525";
+import * as QUOTESUI from "./quotesui.js?v=20261012-1525";
+import * as MDS from "./mds.js?v=20261012-1525";
+import { optimise } from "./optimise.js?v=20261012-1525";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261012-1509";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261012-1525";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -157,18 +157,21 @@ function renderInputs() {
 
     `<div class="grp">Reinforcement</div>`,
     `<label for="autoCfg">Auto-configure</label>
-     <label class="ref" style="grid-column:2/-1;display:flex;gap:7px;align-items:center">
-       <input id="autoCfg" type="checkbox"${AUTO_CFG ? " checked" : ""} style="width:auto">
-       on duty change
-       <button id="optBtn" style="margin-left:auto;padding:3px 9px">Optimise now</button>
-     </label>`,
+     <div class="ref" style="grid-column:2/-1;display:flex;gap:7px;align-items:center">
+       <label style="display:flex;gap:7px;align-items:center;margin:0">
+         <input id="autoCfg" type="checkbox"${AUTO_CFG ? " checked" : ""} style="width:auto">
+         on duty change
+       </label>
+       <button id="optBtn" type="button" style="margin-left:auto;padding:3px 9px">Optimise now</button>
+     </div>`,
     `<label for="autoMode">Optimise for</label>
      <select id="autoMode" style="grid-column:2/-1">
        <option value="cheapest"${AUTO_MODE === "cheapest" ? " selected" : ""}>Cheapest $/ft</option>
        <option value="fewest_passes"${AUTO_MODE === "fewest_passes" ? " selected" : ""}>Easiest to make &mdash; fewest passes</option>
      </select>`,
-    `<label>&nbsp;</label><div class="derived" id="d_opt" style="grid-column:2/-1"
-       title="${esc(OPT_NOTE)}">${esc(OPT_NOTE)}</div>`,
+    `<label>&nbsp;</label><div class="derived" style="grid-column:2/-1">
+       <span id="optFlash" class="ok"></span><span id="d_opt"
+         title="${esc(OPT_NOTE)}">${esc(OPT_NOTE)}</span></div>`,
     field("X-braid (hoop)","xbraid","select",{opts:XBRAIDS}),
     field("Pitch","pitch","select",{opts:PITCH_LADDER,unit:"in"}),
     derived("Minimum pitch (braid width × 12)","d_minPitch", f(r.minPitch), "in"),
@@ -1398,9 +1401,26 @@ document.addEventListener("change", e => {
 document.addEventListener("click", e => {
   if (!e.target.closest("#optBtn")) return;
   e.preventDefault();
+  const sig = () => JSON.stringify([I.xbraid, I.pitch, I.passes, I.longs, I.longsQty]);
+  const before = sig();
   runOptimise(true);
+  const changed = sig() !== before;
   recalc({ rebuild: true });
+  /* Say something next to the button, not only in the save row at the top of
+     the page. With auto-configure on the design is ALREADY optimal when this
+     is pressed, so the honest answer is usually "nothing to change" - and a
+     silent button reads as a broken one. renderInputs() has just replaced the
+     grid, so this has to come after the rebuild. */
+  flashOpt(changed ? "Braid updated." : "Already optimal — nothing to change.");
 });
+
+function flashOpt(msg) {
+  const el = document.getElementById("optFlash");
+  if (!el) return;
+  const txt = msg + "  ";
+  el.textContent = txt;
+  setTimeout(() => { if (el.textContent === txt) el.textContent = ""; }, 4000);
+}
 
 /* Push the optimiser's braid choice into the controls without rebuilding the
    grid, so whichever field the user is typing in survives untouched. */
