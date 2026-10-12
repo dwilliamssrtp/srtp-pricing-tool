@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261012-1503";
-import { solve, requiredYarnType } from "./engine.js?v=20261012-1503";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261012-1509";
+import { solve, requiredYarnType } from "./engine.js?v=20261012-1509";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -115,40 +115,10 @@ export const optimiserLongs = degC =>
   LONGS.filter(b => !OPTIMISER_SKIPS.test(b)
                  && (degC === undefined || inFamily(b, degC)));
 
-/* Per-foot cost of occupying the line, which the material-only ranking
-   ignored. That omission is how a three-pass 15-1 design came to beat a
-   two-pass 15-3 one: 15-1 and 15-3 have identical strength-to-weight and
-   identical $/lb, but the thinner braid clears a finer pitch, which sits at
-   a steeper angle, so more of the yarn strength resolves into hoop and
-   ~13% less fibre is needed. Real, but bought with 50% more braider time,
-   which costs several times what the yarn saves.
-
-   Stage rates are the Profitability Review's (see parts.js labourDays), with
-   the design's pass count replacing the stored one on the Braider. Days
-   scale linearly with footage, so the per-foot charge is the day cost over
-   the BOTTLENECK stage's day rate and does not depend on project length.
-   Returns null when the size has no stage rates, which is the case for the
-   DH/LPG variants and 2in, 2.875in and 6.8in. */
-function lineCostPerFt(stages, dayCost, passes, hoursPerDay) {
-  if (!stages || !stages.length || !(dayCost > 0)) return null;
-  let slowest = Infinity;
-  for (const st of stages) {
-    if (st.ft_per_min === null || st.ft_per_min === undefined) continue;
-    const n = st.stage === "Braider" ? passes : (st.passes || 1);
-    const rate = Number(st.ft_per_min) * 60 * 24 * (1 / n)
-               * Number(st.efficiency ?? 0.8) * Number(st.braider_mult ?? 1)
-               * ((hoursPerDay ?? 24) / 24);
-    if (rate > 0 && rate < slowest) slowest = rate;
-  }
-  return slowest === Infinity ? null : dayCost / slowest;
-}
-
 export function optimise(base, prices, opts = {}) {
   const t0 = performance.now();
   const maxPasses = opts.maxPasses ?? 3;
   const degC = Math.floor((base.degF - 32) * (5 / 9) + 1e-9);    // engine D7
-  const stages = opts.stages || null;
-  const dayCost = Number(opts.dayCost) || 0;
   let considered = 0, nearest = null;
   const tried = [];
 
@@ -167,12 +137,9 @@ export function optimise(base, prices, opts = {}) {
                        longs: longsName, longsQty: lp.qty };
         const r = solve({ ...cand, prices });
         const chk = checkDesign(r);
-        const line = lineCostPerFt(stages, dayCost, passes, opts.hoursPerDay);
         const row = { inputs: cand, costPerFt: r.costPerFt, burst: r.burstTotal,
                       warnings: chk.soft, blockers: chk.hard, clean: chk.clean,
-                      angle: r.braidAngle, weight: r.weightPerFt, solved: r,
-                      lineCostPerFt: line,
-                      totalCostPerFt: r.costPerFt + (line || 0) };
+                      angle: r.braidAngle, weight: r.weightPerFt, solved: r };
 
         if (!chk.ok) {
           // Keep the closest miss so the UI can explain the refusal.
@@ -209,15 +176,11 @@ export function optimise(base, prices, opts = {}) {
    configuration is still offered when nothing clean exists. */
 function rankCheapest(a, b) {
   if (a.clean !== b.clean) return a.clean ? -1 : 1;
-  /* With stage rates, cheapest means cheapest to deliver: yarn plus the line
-     time it takes. Without them there is no honest price for an extra
-     braider pass, so pass count leads instead of being paid for, which stops
-     the search buying pennies of yarn with a whole extra pass. */
-  if (a.lineCostPerFt === null || b.lineCostPerFt === null) {
-    if (a.inputs.passes !== b.inputs.passes) return a.inputs.passes - b.inputs.passes;
-    return a.costPerFt - b.costPerFt;
-  }
-  return a.totalCostPerFt - b.totalCostPerFt;
+  /* Material cost only. Production time is deliberately NOT priced in here:
+     the Designer costs the pipe, not the run. The pass count a design needs
+     is still visible, and the fewest-passes objective is there for when that
+     is what matters. */
+  return a.costPerFt - b.costPerFt;
 }
 
 /* Fewest passes: easiest to make, cost second. Pass count leads here rather

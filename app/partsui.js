@@ -4,8 +4,8 @@
    Rendered into the Pricing page. Read-only for viewers and estimators,
    editable for admins, which is what the RLS policies allow.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1503";
-import { ANSI_CLASSES } from "./parts.js?v=20261012-1503";
+import * as DB from "./db.js?v=20261012-1509";
+import { ANSI_CLASSES } from "./parts.js?v=20261012-1509";
 
 const PART_KIND_LABEL = {
   end_flange: "End flanges", lap_flange: "Lap flanges",
@@ -29,16 +29,6 @@ export async function load(bookId) {
     ]);
   } catch (err) { PARTS = []; SPEEDS = []; SETTINGS = []; }
 }
-
-/* The braid optimiser prices each braider pass off these stage rates, so it
-   needs the rows for one size plus the day cost. Exposed here rather than
-   re-queried, because this module already holds them for the Pricing page. */
-export const stagesFor = size =>
-  SPEEDS.filter(s => String(s.rtp_size) === String(size));
-export const settingValue = key => {
-  const row = SETTINGS.find(s => s.key === key);
-  return row && row.value !== null && row.value !== undefined ? Number(row.value) : null;
-};
 
 export const counts = () => ({
   total: PARTS.length, costed: PARTS.filter(p => p.cost != null).length
