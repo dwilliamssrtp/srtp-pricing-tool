@@ -37,8 +37,7 @@ const PIPE_ORDER = ["1","1.25","1.5","1.75","2","2.375","2.375 DH","2.375 LPG",
 /* Inputs!AI28:AN38 — polymer master. cost = the live Inputs!J4:J15 price book. */
 const MATERIALS = {
   "Nylon - 290":                            { sg:1.13, alt:"Nylon - 290 (Low Temp)",  comp:900,  acr:"PA" },
-  "Nylon - 290Z":                           { sg:1.13, alt:"Nylon - 290Z (hi Temp)",  comp:900,  acr:"PA",
-                                              code:"PAZ" },
+  "Nylon - 290Z":                           { sg:1.13, alt:"Nylon - 290Z (hi Temp)",  comp:900,  acr:"PA" },
   "PPS":                                    { sg:1.25, alt:"",  comp:null, acr:"PS" },
   "Admer":                                  { sg:0.92, alt:"Admer (Sweet)",  comp:null, acr:""   },
   "Lotader":                                { sg:0.92, alt:"Lotader (Sour)",  comp:null, acr:""   },
@@ -241,7 +240,12 @@ export const LONGS_LADDER = (() => { const a=[]; for (let q=4; q<=200; q+=4) a.p
 
    `acr` already carries the workbook's two-letter polymer codes (PPS -> PS),
    so `code` is only needed where those collide: both PP grades carry acr
-   "PP", and the HT grade has to stay distinguishable from plain PP. */
+   "PP", and the HT grade has to stay distinguishable from plain PP.
+
+   The vocabulary is the user's: PA nylon, PP polypropylene, PS PPS, PPUVHT
+   the HT polypropylene. Both nylons are therefore PA, which is fine - 290Z
+   is only ever a BACKER, and the code is built from the liner and jacket
+   alone, so the two can never collide in a code. */
 export const matCode = key => {
   const k = (key || "").trim();
   /* Sour service at 185F has no tabulated grade - the sheet answers
