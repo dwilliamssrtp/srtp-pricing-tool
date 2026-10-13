@@ -171,10 +171,26 @@ const API_NOMINAL = [
 ];
 
 /* MDS1!O4:Q8 — reel hardware option lists. */
-const REEL_SP  = [42,60,96,124,144,174,191];
-const REEL_HUB = [30,43,60,72,76,80,84,88,92,96,100,104,108,112,116,120,
+/* SP54 and hubs 40, 42 and 68 were missing, which made four of the eight
+   reels on the master cost sheet impossible to select here. */
+const REEL_SP  = [42,54,60,96,124,144,174,191];
+const REEL_HUB = [30,40,42,43,60,68,72,76,80,84,88,92,96,100,104,108,112,116,120,
                   140,144,148,152,156,158,159,160,172,176,180];
 const REEL_T   = [44.5,48,56,80,92];
+
+/* The reels actually owned, as SP / HD / T. The master cost sheet carries a
+   priced row for each under the same code, so a reel picked here can always
+   be quoted - keep the two lists in step. */
+const REELS = [
+  { code:"SP42-HD30-T48",   sp:42,  hub:30,  t:48 },
+  { code:"SP54-HD40-T48",   sp:54,  hub:40,  t:48 },
+  { code:"SP60-HD42-T48",   sp:60,  hub:42,  t:48 },
+  { code:"SP96-HD42-T48",   sp:96,  hub:42,  t:48 },
+  { code:"SP96-HD68-T56",   sp:96,  hub:68,  t:56 },
+  { code:"SP144-HD108-T80", sp:144, hub:108, t:80 },
+  { code:"SP174-HD120-T80", sp:174, hub:120, t:80 },
+  { code:"SP191-HD148-T80", sp:191, hub:148, t:80 }
+];
 
 /* Inputs!AH3:AH146 — the sanctioned braid pitch ladder: 1.15" to 8.30" in 0.05" steps. */
 const PITCH_LADDER = (() => { const a=[]; for (let v=1.15; v<=8.3001; v+=0.05) a.push(Math.round(v*100)/100); return a; })();
@@ -226,7 +242,7 @@ export {
   COUPLING_BY_NAME, COUPLING_HI, COUPLING_LO, COUPLING_OD_POST, CDS_FITTINGS,
   TEMPS, SERVICES, LINER_SWEET, LINER_SOUR, BOND_BY_LINER,
   BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR, BRAID_FAMILY_BY_TEMP,
-  API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
+  API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, SPOOL_REF, SPOOL_STRAIN, LPG_CODES
 };
 

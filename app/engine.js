@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode
-} from "./data.js?v=20261013-0948";
+} from "./data.js?v=20261013-1134";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -36,6 +36,35 @@ export const matKey = n => (n || "").trim();
    published for Twaron at or below 65°C (Inputs!B82) and for Technora
    above it. degC is ROUNDDOWN((degF-32)*5/9), so 150°F lands on 65 and
    still takes Twaron, while 185°F and up require Technora. */
+/* The wrap build-up for one reel (MDS1!K3:M47), lifted out of solve() so a
+   reel can be costed without running the whole design. Each turn adds a
+   layer of pipe to the pack diameter; the cumulative length at the flange
+   OD is what the reel holds. */
+export function reelWraps(jacketOD, hub, traverse) {
+  const out = [];
+  if (!(jacketOD > 0)) return out;
+  let prevL = rDown(hub + jacketOD * 2, 0);                             // L4
+  let cum   = ((hub * Math.PI) * (traverse / jacketOD)) / 12;           // M4
+  out.push({ n:1, odTotal:prevL, lenFt:cum });
+  for (let n = 2; n <= 44; n++) {
+    const addFt = ((prevL * Math.PI) * (traverse / jacketOD)) / 12;     // M5..
+    cum += addFt;
+    prevL = rDown(prevL + jacketOD * 2, 0);                             // L5..
+    out.push({ n, odTotal:prevL, lenFt:cum, addFt });
+  }
+  return out;
+}
+
+/* Feet of finished pipe one reel holds, and whether it is legal to wind on
+   it: hub / pipe OD must be at least 20D (the Reels sheet minimum bend). */
+export function reelFit(jacketOD, sp, hub, traverse) {
+  const wraps = reelWraps(jacketOD, hub, traverse);
+  const capacity = wraps.length
+    ? vlookupApprox(sp, wraps.map(w => [w.odTotal, w.lenFt])) : 0;
+  const bendD = jacketOD ? hub / jacketOD : 0;
+  return { capacity: capacity || 0, bendD, ok: bendD >= 20 };
+}
+
 export const requiredYarnType = degC => degC <= 65 ? "Twaron (KN)" : "Technora (TN)";
 function mat(name, prices) {
   const k = matKey(name);
@@ -344,18 +373,7 @@ export function solve(inp) {
 
   /* ---------------- 15. reel / wrap model (MDS1!K3:M47, F31:F39) --- */
   o.reelSP = inp.reelSP; o.reelHub = inp.reelHub; o.reelT = inp.reelT;
-  o.wraps = [];
-  if (o.jacketOD > 0) {
-    let prevL = rDown(o.reelHub + o.jacketOD * 2, 0);                   // L4
-    let cum   = ((o.reelHub * Math.PI) * (o.reelT / o.jacketOD)) / 12;   // M4
-    o.wraps.push({ n:1, odTotal:prevL, lenFt:cum });
-    for (let n = 2; n <= 44; n++) {
-      const addFt = ((prevL * Math.PI) * (o.reelT / o.jacketOD)) / 12;   // M5..
-      cum += addFt;
-      prevL = rDown(prevL + o.jacketOD * 2, 0);                          // L5..
-      o.wraps.push({ n, odTotal:prevL, lenFt:cum, addFt });
-    }
-  }
+  o.wraps = reelWraps(o.jacketOD, o.reelHub, o.reelT);
   const wrapPairs = o.wraps.map(w => [w.odTotal, w.lenFt]);
   o.reelCapacity = o.wraps.length ? vlookupApprox(o.reelSP, wrapPairs) : 0;   // VLOOKUP(E28,...)
   o.reelMax      = rUp(o.reelCapacity || 0, 0);                              // I37

@@ -111,6 +111,11 @@ h2.sec{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--
 #guide .fin{margin:10px 0 0;padding-top:8px;border-top:1px solid var(--line);
   font-size:11px;line-height:1.5;color:var(--ink3)}
 #guide:not([open]) summary{margin:0}
+/* Reel check rows are clickable - pick a reel by clicking its line. The
+   current one is marked with a dot rather than a tick so it stands out
+   among the ones that merely fit. */
+.chk .row[data-reel]{cursor:pointer;border-radius:4px}
+.chk .row[data-reel]:hover{background:var(--card2)}
 @media (max-width:1180px){
   #page-designer{grid-template-columns:1fr}
   #guide{position:static;max-height:none}
@@ -456,6 +461,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261013-0948"></script>
+<script type="module" src="app/ui.js?v=20261013-1134"></script>
 </body>
 </html>

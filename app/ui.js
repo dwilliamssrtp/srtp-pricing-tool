@@ -3,16 +3,16 @@
    ===================================================================== */
 import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
-  TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
+  TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
-} from "./data.js?v=20261013-0948";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261013-0948";
-import * as DB from "./db.js?v=20261013-0948";
-import { initPages } from "./pages.js?v=20261013-0948";
-import * as PARTSUI from "./partsui.js?v=20261013-0948";
-import * as QUOTESUI from "./quotesui.js?v=20261013-0948";
-import * as MDS from "./mds.js?v=20261013-0948";
-import { optimise, designRules } from "./optimise.js?v=20261013-0948";
+} from "./data.js?v=20261013-1134";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1134";
+import * as DB from "./db.js?v=20261013-1134";
+import { initPages } from "./pages.js?v=20261013-1134";
+import * as PARTSUI from "./partsui.js?v=20261013-1134";
+import * as QUOTESUI from "./quotesui.js?v=20261013-1134";
+import * as MDS from "./mds.js?v=20261013-1134";
+import { optimise, designRules } from "./optimise.js?v=20261013-1134";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261013-0948";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261013-1134";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -137,6 +137,7 @@ function updateDerived(r) {
     if (e) { e.textContent = v[id]; e.title = v[id]; }
   }
   renderCheck(r);
+  renderReels(r);
 
   const g = document.getElementById("grp24t");
   if (g) g.innerHTML = "24-Tensile layer " +
@@ -175,6 +176,42 @@ function renderCheck(r) {
     return `<div class="row ${state}"><span class="mk">${mark}</span>`
          + `<span>${esc(d.label)}</span><span class="num">${val}</span></div>`;
   }).join("");
+}
+
+/* Which reels this pipe can actually go on, and how much fits.
+
+   Two things decide it: hub / pipe OD must be at least 20D (the Reels sheet
+   minimum bend), and the wrap model says how many feet reach the flange OD.
+   Listed for every reel on the master cost sheet rather than just the one
+   selected, because the question is "which works", not "does this one".
+   Click a row to select that reel. */
+function renderReels(r) {
+  const host = document.getElementById("d_reels");
+  if (!host) return;
+  if (!(r.jacketOD > 0)) { host.innerHTML = ""; return; }
+  const rows = REELS.map(k => {
+    const fit = reelFit(r.jacketOD, k.sp, k.hub, k.t);
+    const cur = k.sp === I.reelSP && k.hub === I.reelHub && k.t === I.reelT;
+    const reels = fit.ok && fit.capacity ? Math.ceil(r.lengthFt / fit.capacity) : null;
+    return { ...k, ...fit, cur, reels };
+  });
+  const best = rows.filter(x => x.ok).sort((a, b) => b.capacity - a.capacity)[0];
+  host.innerHTML = `<div class="cap">Reel check &mdash; ${f0(r.lengthFt)} ft of `
+    + `${f(r.jacketOD, 2)}&Prime; OD</div>`
+    + rows.map(k => {
+    const state = !k.ok ? "fail" : (k.cur ? "warn" : "pass");
+    const mark  = k.cur ? "●" : (k.ok ? "✓" : "✗");
+    const right = k.ok
+      ? `${f0(k.capacity)} ft${k.reels ? " · " + k.reels + " reel" + (k.reels > 1 ? "s" : "") : ""}`
+      : `${f(k.bendD, 1)}D &lt; 20D`;
+    return `<div class="row ${state}" data-reel="${k.sp}:${k.hub}:${k.t}"
+              title="${k.ok ? "Bend " + f(k.bendD,1) + "D" : "Bend radius too tight for this pipe"}">`
+         + `<span class="mk">${mark}</span><span>${esc(k.code.replace(/-/g, " / "))}</span>`
+         + `<span class="num">${right}</span></div>`;
+  }).join("")
+    + (best ? `<p class="fin">Most on one reel: <b>${esc(best.code.replace(/-/g," / "))}</b>, `
+            + `${f0(best.capacity)} ft.</p>`
+            : `<p class="fin">No reel meets the 20D minimum bend for this pipe.</p>`);
 }
 
 function renderInputs() {
@@ -235,6 +272,7 @@ function renderInputs() {
     field("Hub diameter &mdash; HD","reelHub","select",{opts:REEL_HUB,unit:"in"}),
     field("Traverse &mdash; T","reelT","select",{opts:REEL_T,unit:"in"}),
     derived("Min bend ratio (HD / jacket OD)","d_minD", f(r.minD,1)+"D"),
+    `<div class="chk" id="d_reels"></div>`,
 
     `<div class="grp">Commercial</div>`,
     field("Color masterbatch %","colorPct","num",{step:0.005,min:0,unit:"frac"}),
@@ -1445,6 +1483,16 @@ document.addEventListener("change", e => {
     recalc({ rebuild: true });
   }
 });
+document.addEventListener("click", e => {
+  const pick = e.target.closest("[data-reel]");
+  if (pick) {
+    const [sp, hub, t] = pick.dataset.reel.split(":").map(Number);
+    Object.assign(I, { reelSP: sp, reelHub: hub, reelT: t });
+    recalc({ rebuild: true });
+    return;
+  }
+});
+
 document.addEventListener("click", e => {
   if (!e.target.closest("#optBtn")) return;
   e.preventDefault();
