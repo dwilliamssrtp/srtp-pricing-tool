@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
-} from "./data.js?v=20261013-0934";
-import { solve, solveSpool, matKey } from "./engine.js?v=20261013-0934";
-import * as DB from "./db.js?v=20261013-0934";
-import { initPages } from "./pages.js?v=20261013-0934";
-import * as PARTSUI from "./partsui.js?v=20261013-0934";
-import * as QUOTESUI from "./quotesui.js?v=20261013-0934";
-import * as MDS from "./mds.js?v=20261013-0934";
-import { optimise, designRules } from "./optimise.js?v=20261013-0934";
+} from "./data.js?v=20261013-0943";
+import { solve, solveSpool, matKey } from "./engine.js?v=20261013-0943";
+import * as DB from "./db.js?v=20261013-0943";
+import { initPages } from "./pages.js?v=20261013-0943";
+import * as PARTSUI from "./partsui.js?v=20261013-0943";
+import * as QUOTESUI from "./quotesui.js?v=20261013-0943";
+import * as MDS from "./mds.js?v=20261013-0943";
+import { optimise, designRules } from "./optimise.js?v=20261013-0943";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261013-0934";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261013-0943";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -83,6 +83,18 @@ function load(){
   try{ const d = JSON.parse(localStorage.getItem(LS)||"null");
     if(d){ I={...DEFAULTS,...d.I}; S={...SPOOL_DEFAULTS,...d.S}; TAB=d.TAB||TAB; } }catch(e){}
 }
+
+/* The Designer guide rail folds away, and stays folded. `toggle` does not
+   bubble, so the listener captures. */
+const GUIDE_KEY = LS + "-guide";
+document.addEventListener("toggle", e => {
+  if (e.target && e.target.id === "guide")
+    try { localStorage.setItem(GUIDE_KEY, e.target.open ? "1" : "0"); } catch (err) {}
+}, true);
+try {
+  const g = document.getElementById("guide");
+  if (g && localStorage.getItem(GUIDE_KEY) === "0") g.open = false;
+} catch (e) {}
 
 /* =====================================================================
    input section  (Inputs!A1:C17)
