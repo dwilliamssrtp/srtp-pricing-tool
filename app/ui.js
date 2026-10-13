@@ -4,16 +4,15 @@
 import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
-  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER,
-  CDS_FITTINGS
-} from "./data.js?v=20261013-1334";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1334";
-import * as DB from "./db.js?v=20261013-1334";
-import { initPages } from "./pages.js?v=20261013-1334";
-import * as PARTSUI from "./partsui.js?v=20261013-1334";
-import * as QUOTESUI from "./quotesui.js?v=20261013-1334";
-import * as MDS from "./mds.js?v=20261013-1334";
-import { optimise, designRules } from "./optimise.js?v=20261013-1334";
+  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
+} from "./data.js?v=20261013-1343";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1343";
+import * as DB from "./db.js?v=20261013-1343";
+import { initPages } from "./pages.js?v=20261013-1343";
+import * as PARTSUI from "./partsui.js?v=20261013-1343";
+import * as QUOTESUI from "./quotesui.js?v=20261013-1343";
+import * as MDS from "./mds.js?v=20261013-1343";
+import { optimise, designRules } from "./optimise.js?v=20261013-1343";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -26,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261013-1334";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261013-1343";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -545,9 +544,11 @@ function sheetMDS2(r) {
       from the live base-tube stack here.</p>`;
 }
 
-/* The CDS is its own page rather than a strip entry: it is the sheet that
-   goes to a customer, and it carries the construction diagram and the whole
-   fittings reference instead of one row of it. */
+/* The CDS is its own page rather than a strip entry, and it is the sheet
+   that goes to a CUSTOMER. So construction leads at full width, and the
+   workbook cell references that mark every other panel are left off - they
+   mean nothing outside the office. The fittings lookup stays internal; only
+   the insert ID it produces appears here. */
 export function cdsHTML() {
   const r = R;
   if (!r) return `<p class="ref">Open or build a design on the Designer first.</p>`;
@@ -593,12 +594,6 @@ export function cdsHTML() {
     ["Ribs / max pressure",{v:f0(r.couplingRibs),n:1},"ribs",{v:f0(r.couplingMaxP),n:1},"psi"]
   ]);
 
-  const fittings = tbl(["Design pipe size",{t:"OD post swage",n:1},"",{t:"Insert ID",n:1},""],
-    CDS_FITTINGS.map(([size, od, id]) => ({
-      cls: size === r.sizeKey ? "cur" : "",
-      cells: [ size, {v:od==null?"—":f3(od),n:1},"in", {v:id==null?"—":f3(id),n:1},"in" ]
-    })));
-
   /* The artwork is generic; naming this design's own layers under it is what
      ties it to the sheet. onerror drops the figure cleanly if the file is
      missing rather than leaving a broken image on a customer document. */
@@ -615,13 +610,11 @@ export function cdsHTML() {
     `<div class="card" style="margin-bottom:16px"><h3>${title}${
       sub?` <small>${sub}</small>`:""}</h3><div class="pad">${body}</div></div>`;
 
-  return card("Duty &amp; standard", head, "CDS!A1:H26")
+  return card("Construction", fig + cons)
        + `<div class="two">
-            <div>${card("Construction", fig + cons)}</div>
+            <div>${card("Duty &amp; standard", head)}</div>
             <div>${card("Parameters", par)}</div>
-          </div>`
-       + card("Fittings reference", fittings,
-              "CDS!L6:N23 &middot; by design pipe size");
+          </div>`;
 }
 
 function sheetWO(r) {

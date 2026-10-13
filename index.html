@@ -265,6 +265,18 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   /* Everything that is not the datasheet gets out of the way, so one sheet
      of paper carries exactly one MDS. */
   #page-designer,#page-quotes,#page-archive,#page-pricing,#page-users{display:none!important}
+
+  /* The CDS is sent to customers, so it prints as a document rather than as
+     a screenshot of a dark UI: white cards, black text, and the construction
+     diagram kept whole on its page. */
+  #page-cds{padding:0.35in 0.4in}
+  #page-cds *{color:#000!important}
+  #page-cds .card{background:#fff;border:1px solid #bbb;box-shadow:none;
+    page-break-inside:avoid;margin-bottom:12px}
+  #page-cds .layerfig,#page-cds table{page-break-inside:avoid}
+  #page-cds th,#page-cds td{border-color:#ccc!important}
+  #page-cds thead th,#page-cds .grp2 td{background:#eee!important}
+  #page-cds .two{display:block}
 }
 
 /* ---------- sign-in gate ---------- */
@@ -475,6 +487,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261013-1334"></script>
+<script type="module" src="app/ui.js?v=20261013-1343"></script>
 </body>
 </html>
