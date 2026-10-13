@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261013-0923";
-import { solve } from "./engine.js?v=20261013-0923";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261013-0923";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261013-0923";
+import * as DB from "./db.js?v=20261013-0934";
+import { solve } from "./engine.js?v=20261013-0934";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261013-0934";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261013-0934";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -70,18 +70,54 @@ function pricedFromPart(part, qty, unit, markup) {
 const PART_KIND_LABEL = { end_flange: "End flanges", lap_flange: "Lap flanges",
                           splice: "Splices", reel: "Reels", support: "Support items" };
 
-/* Every row of the master cost sheet, grouped by kind. Deliberately NOT
-   filtered by the group's pipe size: the whole point is being able to put a
-   6in ANSI 600 splice, a different reel or a support item on a 4in group. */
-const partOptions = () => ["end_flange", "lap_flange", "splice", "reel", "support"]
+const ADD_KINDS = ["end_flange", "lap_flange", "splice", "reel", "support"];
+
+/* Search text per group, kept so a refresh after Add does not wipe what was
+   typed - handy when several similar parts go on in a row. */
+const ADD_TERM = {};
+
+/* All words must match, against the label and its kind, so "6 splice" finds
+   the 6in splice and "reel 96" the SP96. */
+const matchParts = term => {
+  const words = String(term || "").toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return PARTS;
+  return PARTS.filter(p => {
+    const hay = `${p.label} ${PART_KIND_LABEL[p.kind] || ""}`.toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
+};
+
+/* Every matching row of the master cost sheet, grouped by kind. Deliberately
+   NOT filtered by the group's pipe size: the whole point is being able to put
+   a 6in ANSI 600 splice, a different reel or a support item on a 4in group. */
+const partOptions = (term) => {
+  const hits = matchParts(term);
+  return ADD_KINDS
   .map(k => {
-    const rows = PARTS.filter(p => p.kind === k);
+    const rows = hits.filter(p => p.kind === k);
     if (!rows.length) return "";
     return `<optgroup label="${H.esc(PART_KIND_LABEL[k])}">`
          + rows.map(p => `<option value="${H.esc(p.id)}">${H.esc(p.label)}`
              + `${p.cost == null ? " — no cost yet" : ""}</option>`).join("")
          + `</optgroup>`;
   }).join("");
+};
+
+/* 108 rows is too many to scroll, so the picker has a search box. It rewrites
+   ONLY its own select - never H.refresh() - because a full re-render would
+   replace the box under the caret and the typing would come apart, which is
+   exactly what the duty fields used to do on the Designer. */
+function filterAddPicker(groupNo) {
+  const sel = document.getElementById("agl-" + groupNo);
+  if (!sel) return;
+  const term = ADD_TERM[groupNo] || "";
+  const opts = partOptions(term);
+  const hits = matchParts(term);
+  sel.innerHTML = `<option value="">${opts ? "&mdash; add a line from the cost sheet &mdash;"
+                                           : "&mdash; nothing matches &mdash;"}</option>` + opts;
+  // Narrowed to one? Select it, so Add works without a second click.
+  if (hits.length === 1) sel.value = String(hits[0].id);
+}
 
 /* --------------------------------------------------------------------
    Build the five lines for a pipe size from a saved design.
@@ -377,9 +413,14 @@ function editorPage() {
          budget ${money(g.budget,0)}, margin ${g.margin==null?"—":(g.margin*100).toFixed(1)+"%"},
          true margin ${g.trueMargin==null?"—":(g.trueMargin*100).toFixed(1)+"%"}</p>`
       + `<div class="savebar">
-          <select id="agl-${g.groupNo}" style="flex:1 1 300px">
-            <option value="">&mdash; add a line from the cost sheet &mdash;</option>
-            ${partOptions()}
+          <input class="aglSearch" data-g="${g.groupNo}" type="search"
+            placeholder="search the cost sheet&hellip;" value="${esc(ADD_TERM[g.groupNo] || "")}"
+            style="flex:0 1 190px">
+          <select id="agl-${g.groupNo}" style="flex:1 1 280px">
+            <option value="">${partOptions(ADD_TERM[g.groupNo])
+              ? "&mdash; add a line from the cost sheet &mdash;"
+              : "&mdash; nothing matches &mdash;"}</option>
+            ${partOptions(ADD_TERM[g.groupNo])}
           </select>
           <input id="aglq-${g.groupNo}" type="number" min="1" step="1" value="1"
             title="Quantity" style="width:80px;text-align:right">
@@ -778,6 +819,15 @@ async function buildLineIndex() {
     for (const r of rows) (LINE_INDEX[r.quote_id] ||= []).push(r.label);
   } catch (e) { LINE_INDEX = {}; }
 }
+
+document.addEventListener("input", e => {
+  const find = e.target.closest(".aglSearch");
+  if (find) {
+    ADD_TERM[find.dataset.g] = find.value;
+    filterAddPicker(find.dataset.g);
+    return;                      // no refresh: the caret stays where it is
+  }
+});
 
 document.addEventListener("input", e => {
   const box = e.target.closest(".qsearch");
