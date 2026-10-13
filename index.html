@@ -98,7 +98,7 @@ h2.sec{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--
    itself so the other pages stay single column; [hidden] still wins over this
    because that rule is !important. The rail sticks against the tall body
    column beside it. */
-#page-designer{display:grid;grid-template-columns:238px minmax(0,1fr);
+#page-designer{display:grid;grid-template-columns:196px minmax(0,1fr);
   gap:18px;align-items:start}
 #guide{position:sticky;top:96px;padding:9px 12px 11px;max-height:calc(100dvh - 116px);
   overflow:auto}
@@ -106,7 +106,7 @@ h2.sec{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--
   letter-spacing:.12em;color:var(--ink3);outline:none}
 #guide summary:hover{color:var(--accent)}
 #guide ol{margin:9px 0 0;padding-left:17px}
-#guide li{margin-bottom:8px;font-size:11.5px;line-height:1.5;color:var(--ink2)}
+#guide li{margin-bottom:6px;font-size:12px;line-height:1.45;color:var(--ink2)}
 #guide li b{color:var(--ink);font-weight:600}
 #guide .fin{margin:10px 0 0;padding-top:8px;border-top:1px solid var(--line);
   font-size:11px;line-height:1.5;color:var(--ink3)}
@@ -327,30 +327,13 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   <details id="guide" class="card noprint" open>
     <summary>How to use this</summary>
     <ol>
-      <li><b>Name it.</b> Under <b>Saved designs</b> type a design name and the client,
-        then <b>Save</b>. Use <b>Open</b> on a row to come back to one later.</li>
-      <li><b>Enter the duty.</b> In <b>Project &amp; Design Inputs</b>:
-        <b>Application Request</b> (the footage), <b>SRTP Pipe Size</b>,
-        <b>Pipe Pressure</b>, <b>Pipe Temp</b>, <b>Service (fluid)</b>,
-        <b>Service (sour)</b>, <b>Years of Service</b> and <b>Application</b>.</li>
-      <li><b>Set the reinforcement.</b> Leave <b>Auto-configure</b> ticked and pick
-        <b>Optimise for</b> &mdash; cheapest $/ft, or easiest to make (fewest passes).
-        Press <b>Optimise now</b> to re-solve by hand. A braid you choose yourself sticks
-        until the duty changes.</li>
-      <li><b>Read the Design check.</b> Grey ticks pass, amber is a warning you can still
-        ship, red is a blocker. Each line shows the measured value against its limit.</li>
-      <li><b>Save again</b> so the braid is stored with the design.</li>
-      <li><b>MDS tab.</b> <b>Build from the current design</b>, fill the doc number and
-        revision, then Print. Saving freezes the sheet; use <b>New revision</b> to re-issue
-        and <b>Reload design</b> to pull in changes.</li>
-      <li><b>Quotes tab.</b> <b>Quote this</b> on a saved design with its footage builds the
-        five lines. Add flanges, splices, reels or support with the cost-sheet search, edit
-        any price, cost, margin or day count, then <b>Save</b>.</li>
-      <li><b>Sales quote view</b> is the customer copy. <b>Archive</b> keeps finished quotes.</li>
+      <li>Name it and <b>Save</b></li>
+      <li>Enter size, pressure, temp, service</li>
+      <li>Pick <b>cheapest</b> or <b>easiest</b></li>
+      <li>Red in <b>Design check</b> = blocked</li>
+      <li><b>Save</b> again</li>
+      <li><b>MDS</b> to print &middot; <b>Quotes</b> to price</li>
     </ol>
-    <p class="fin"><b>Pricing</b> holds the price book and the master cost sheet.
-      The <b>Spool Calculator</b> at the bottom of this page is standalone &mdash; it is not
-      wired to the design above.</p>
   </details>
 
   <div id="designerBody">
@@ -473,6 +456,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261013-0943"></script>
+<script type="module" src="app/ui.js?v=20261013-0948"></script>
 </body>
 </html>
