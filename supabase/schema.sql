@@ -327,7 +327,8 @@ create table if not exists public.mds_documents (
   id uuid primary key default gen_random_uuid(),
   design_id uuid references public.designs(id) on delete set null,
   doc_number text, revision text not null default 'A', title text not null,
-  client text, project text, prepared_by text, approved_by text,
+  -- the three line leads that sign the sheet off on the floor
+  client text, project text, base_lead text, braid_lead text, cover_lead text,
   issued_on date default current_date,
   burst_basis text not null default 'api' check (burst_basis in ('api','stress_rupture')),
   notes text, snapshot jsonb not null,

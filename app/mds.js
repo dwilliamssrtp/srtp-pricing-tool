@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261013-1134";
-import { solve } from "./engine.js?v=20261013-1134";
+import * as DB from "./db.js?v=20261013-1320";
+import { solve } from "./engine.js?v=20261013-1320";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -41,7 +41,7 @@ export function fromCurrent(inputs, solved, bookId) {
     doc_number: "", revision: "A",
     title: solved.productName || "Manufacturing Datasheet",
     client: inputs.client || "", project: "",
-    prepared_by: "", approved_by: "",
+    base_lead: "", braid_lead: "", cover_lead: "",
     issued_on: new Date().toISOString().slice(0, 10),
     burst_basis: "api", notes: "",
     price_book_id: bookId || null,
@@ -157,9 +157,10 @@ function sheetView() {
       <label class="ref">Rev <input class="mdsf" data-f="revision" value="${esc(d.revision)}" style="width:48px"></label>
       <label class="ref">Project <input class="mdsf" data-f="project" value="${esc(d.project || "")}" style="width:150px"></label>
       <label class="ref">Client <input class="mdsf" data-f="client" value="${esc(d.client || "")}" style="width:140px"></label>
-      <label class="ref">Prepared <input class="mdsf" data-f="prepared_by" value="${esc(d.prepared_by || "")}" style="width:110px"></label>
-      <label class="ref">Approved <input class="mdsf" data-f="approved_by" value="${esc(d.approved_by || "")}" style="width:110px"></label>
       <label class="ref">Issued <input class="mdsf" data-f="issued_on" type="date" value="${esc(d.issued_on || "")}"></label>
+      <label class="ref">Baseline <input class="mdsf" data-f="base_lead" value="${esc(d.base_lead || "")}" style="width:104px"></label>
+      <label class="ref">Braidline <input class="mdsf" data-f="braid_lead" value="${esc(d.braid_lead || "")}" style="width:104px"></label>
+      <label class="ref">Coverline <input class="mdsf" data-f="cover_lead" value="${esc(d.cover_lead || "")}" style="width:104px"></label>
     </div>`;
 
   const layer = (n, name, cells) =>
@@ -262,8 +263,7 @@ function sheetView() {
               <td>Revision</td><th>${esc(d.revision)}</th></tr>
           <tr><td>Project</td><th>${esc(d.project || "—")}</th>
               <td>Issued</td><th>${esc(d.issued_on || "—")}</th></tr>
-          <tr><td>Client</td><th>${esc(d.client || "—")}</th>
-              <td>Prepared</td><th>${esc(d.prepared_by || "—")}</th></tr>
+          <tr><td>Client</td><th colspan="3">${esc(d.client || "—")}</th></tr>
         </table>
       </header>
 
@@ -288,9 +288,9 @@ function sheetView() {
       ${d.notes ? `<p class="notes"><b>Notes.</b> ${esc(d.notes)}</p>` : ""}
 
       <footer class="mdsfoot">
-        <div><span>Prepared</span><b>${esc(d.prepared_by || "")}</b></div>
-        <div><span>Approved</span><b>${esc(d.approved_by || "")}</b></div>
-        <div><span>Date</span><b>${esc(d.issued_on || "")}</b></div>
+        <div><span>Baseline lead</span><b>${esc(d.base_lead || "")}</b></div>
+        <div><span>Braidline lead</span><b>${esc(d.braid_lead || "")}</b></div>
+        <div><span>Coverline lead</span><b>${esc(d.cover_lead || "")}</b></div>
       </footer>
     </article>
   </div>
