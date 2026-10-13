@@ -4,15 +4,16 @@
 import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
-  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER
-} from "./data.js?v=20261013-1320";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1320";
-import * as DB from "./db.js?v=20261013-1320";
-import { initPages } from "./pages.js?v=20261013-1320";
-import * as PARTSUI from "./partsui.js?v=20261013-1320";
-import * as QUOTESUI from "./quotesui.js?v=20261013-1320";
-import * as MDS from "./mds.js?v=20261013-1320";
-import { optimise, designRules } from "./optimise.js?v=20261013-1320";
+  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER,
+  CDS_FITTINGS
+} from "./data.js?v=20261013-1333";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1333";
+import * as DB from "./db.js?v=20261013-1333";
+import { initPages } from "./pages.js?v=20261013-1333";
+import * as PARTSUI from "./partsui.js?v=20261013-1333";
+import * as QUOTESUI from "./quotesui.js?v=20261013-1333";
+import * as MDS from "./mds.js?v=20261013-1333";
+import { optimise, designRules } from "./optimise.js?v=20261013-1333";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +26,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261013-1320";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261013-1333";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -382,7 +383,7 @@ function renderDisplay() {
 /* =====================================================================
    sheet renderers
    ===================================================================== */
-const SHEETS = ["TDS","CDS","WO","Materials","Trace"];
+const SHEETS = ["TDS","WO","Materials","Trace"];
 
 function renderTabs() {
   document.getElementById("tabs").innerHTML = SHEETS.map(s =>
@@ -544,7 +545,13 @@ function sheetMDS2(r) {
       from the live base-tube stack here.</p>`;
 }
 
-function sheetCDS(r) {
+/* The CDS is its own page rather than a strip entry: it is the sheet that
+   goes to a customer, and it carries the construction diagram and the whole
+   fittings reference instead of one row of it. */
+export function cdsHTML() {
+  const r = R;
+  if (!r) return `<p class="ref">Open or build a design on the Designer first.</p>`;
+
   const head = tbl(null, [
     [{v:"Application",k:1},{v:r.app},{v:"Pipe Size",k:1},{v:f0(r.mdsSize)+" in"}],
     [{v:"Design Pressure",k:1},{v:f0(r.psi)+" psi / "+f(r.psi/14.5,1)+" bars"},
@@ -553,12 +560,19 @@ function sheetCDS(r) {
     [{v:"Hydro factor",k:1},{v:f(r.hydroFactor,2)+" × design = "+f0(r.hydroP)+" psi"},
      {v:"Standard",k:1},{v:"API 15S-0020"}]
   ]);
+
   const cons = tbl(["#","Construction"], [
     [{v:1,n:1},"Base — "+esc((r.liner||"").trim().slice(0,5))+" / "+esc((r.backer||"").trim().slice(0,5))],
     [{v:2,n:1},"Longitudinal Reinforcement — "+((r.longsName||"").slice(0,2)==="KN"?"Para-aramid Fibers":"Copolyamide Fibers")],
     [{v:3,n:1},"Hoop Reinforcement — "+((r.xbraid||"").slice(0,2)==="KN"?"Para-aramid Fibers":"Copolyamide Fibers")],
     [{v:4,n:1},"Jacket — "+esc((r.jacket||"").trim().slice(0,5))]
   ]);
+
+  /* Coupling OD and insert ID come from the fittings table by nominal pipe
+     size (CDS!L6:N23). The live sheet's CDS!E26 returns #N/A because it looks
+     the ID up by JACKET OD against a nominal-size column - the two never
+     match. Reading it by size is what the sheet meant to do, and it agrees
+     with the coupling selection on every tabulated size. */
   const par = tbl(["Parameter",{t:"US Unit",n:1},"",{t:"SI Unit",n:1},""], [
     ["Pipe (Nominal Size)",{v:f(r.apiNominal,2),n:1},"in",{v:f(r.apiNominal*25.4,1),n:1},"mm"],
     ["Outer Diameter",{v:f3(r.jacketOD),n:1},"in",{v:f(r.jacketOD*25.4,2),n:1},"mm"],
@@ -569,15 +583,45 @@ function sheetCDS(r) {
     ["Max Installed Tension Load",{v:f0(r.maxTension),n:1},"lbs",{v:f0(r.maxTension/2.2),n:1},"kg"],
     {group:"Fittings"},
     ["Coupling (selected)",{v:esc(r.couplingName),n:1,span:4}],
-    ["Coupling OD (post swage)",{v:f3(r.couplingOD),n:1},"in",{v:f(r.couplingOD*25.4,2),n:1},"mm"],
-    ["Coupling insert ID",{v:f3(r.couplingIDIns),n:1},"in",{v:f(r.couplingIDIns*25.4,2),n:1},"mm"],
+    ["Coupling OD (post swage)",
+      {v:r.fitOD==null?"—":f3(r.fitOD),n:1},"in",
+      {v:r.fitOD==null?"—":f(r.fitOD*25.4,2),n:1},"mm"],
+    ["Coupling insert ID",
+      {v:r.fitID==null?"—":f3(r.fitID),n:1},"in",
+      {v:r.fitID==null?"—":f(r.fitID*25.4,2),n:1},"mm"],
     ["Stem length in ferrule",{v:f3(r.stemLen),n:1},"in",{v:f(r.stemLen*25.4,2),n:1},"mm"],
     ["Ribs / max pressure",{v:f0(r.couplingRibs),n:1},"ribs",{v:f0(r.couplingMaxP),n:1},"psi"]
   ]);
-  return `<h4>Commercial Datasheet &mdash; CDS!A1:H26</h4>${head}
-    <div class="two" style="margin-top:14px"><div>${par}</div><div>${cons}
-      <p class="ref" style="margin-top:12px">The live sheet's <span class="cell">CDS!E26</span> returns #N/A because it
-      looks up the coupling ID by jacket OD against a nominal-size column. Resolved here by coupling selection.</p></div></div>`;
+
+  const fittings = tbl(["Nominal pipe",{t:"OD post swage",n:1},"",{t:"Insert ID",n:1},""],
+    CDS_FITTINGS.map(([size, od, id]) => ({
+      cls: size === r.sizeKey ? "cur" : "",
+      cells: [ size, {v:od==null?"—":f3(od),n:1},"in", {v:id==null?"—":f3(id),n:1},"in" ]
+    })));
+
+  /* The artwork is generic; naming this design's own layers under it is what
+     ties it to the sheet. onerror drops the figure cleanly if the file is
+     missing rather than leaving a broken image on a customer document. */
+  const fig = `<figure class="layerfig">
+      <img src="assets/rtp-layers.png" alt="RTP construction: liner, bond layer, backer,
+        braided reinforcement and jacket" onerror="this.closest('figure').remove()">
+      <figcaption>Liner <b>${esc(r.linerLabel)}</b> &middot; bond <b>${esc(r.bondLabel)}</b>
+        &middot; backer <b>${esc(r.backerLabel)}</b> &middot; reinforcement
+        <b>${esc((r.xbraid||"").replace(/ \(.*/,""))}</b> &middot; jacket
+        <b>${esc(r.jacketLabel)}</b></figcaption>
+    </figure>`;
+
+  const card = (title, body, sub) =>
+    `<div class="card" style="margin-bottom:16px"><h3>${title}${
+      sub?` <small>${sub}</small>`:""}</h3><div class="pad">${body}</div></div>`;
+
+  return card("Duty &amp; standard", head, "CDS!A1:H26")
+       + `<div class="two">
+            <div>${card("Construction", fig + cons)}</div>
+            <div>${card("Parameters", par)}</div>
+          </div>`
+       + card("Fittings reference", fittings,
+              "CDS!L6:N23 &middot; by nominal pipe size");
 }
 
 function sheetWO(r) {
@@ -784,7 +828,7 @@ function sheetTrace(r) {
 function renderPanel() {
   const r = R, p = document.getElementById("panel");
   p.innerHTML = ({
-    "TDS": sheetTDS, "CDS": sheetCDS, "WO": sheetWO,
+    "TDS": sheetTDS, "WO": sheetWO,
     "Materials": sheetMaterials, "Trace": sheetTrace
   }[TAB] || sheetTDS)(r);
 }
@@ -1366,7 +1410,7 @@ async function enterApp(profile) {
   PAGES = initPages({
     pricingHTML: sheetPricing, usersHTML: sheetUsers,
     quotesHTML:  QUOTESUI.quotesHTML, archiveHTML: QUOTESUI.archiveHTML,
-    mdsHTML:     MDS.mdsHTML
+    mdsHTML:     MDS.mdsHTML, cdsHTML
   });
   PAGES.showUsers(profile.role === "admin");
   PAGES.restore();

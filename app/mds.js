@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261013-1320";
-import { solve } from "./engine.js?v=20261013-1320";
+import * as DB from "./db.js?v=20261013-1333";
+import { solve } from "./engine.js?v=20261013-1333";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];

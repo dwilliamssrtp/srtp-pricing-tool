@@ -111,6 +111,14 @@ h2.sec{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--
 #guide .fin{margin:10px 0 0;padding-top:8px;border-top:1px solid var(--line);
   font-size:11px;line-height:1.5;color:var(--ink3)}
 #guide:not([open]) summary{margin:0}
+/* The row for the size on the bench, in a reference table. */
+.tw tr.cur td{background:var(--card2);font-weight:600;color:var(--ink)}
+/* The construction diagram is the one piece of artwork on a datasheet, so it
+   gets the full width of its card and scales rather than crops. */
+.layerfig{margin:0;padding:0}
+.layerfig img{display:block;width:100%;height:auto;border-radius:8px;
+  background:#fff}
+.layerfig figcaption{margin-top:7px;font-size:11px;color:var(--ink3);line-height:1.5}
 /* Reel check rows are clickable - pick a reel by clicking its line. The
    current one is marked with a dot rather than a tick so it stands out
    among the ones that merely fit. */
@@ -310,6 +318,7 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
     <nav class="pagenav" id="pagenav">
       <button data-page="designer" aria-selected="true">Designer</button>
       <button data-page="mds">MDS</button>
+      <button data-page="cds">CDS</button>
       <button data-page="quotes">Quotes</button>
       <button data-page="archive">Archive</button>
       <button data-page="pricing">Pricing</button>
@@ -434,6 +443,11 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   </div><!-- /#designerBody -->
 </section>
 
+<section class="page" id="page-cds" hidden>
+  <h2 class="sec">Commercial Datasheet</h2>
+  <div id="cdsPage"></div>
+</section>
+
 <section class="page" id="page-mds" hidden>
   <h2 class="sec">Manufacturing Datasheet</h2>
   <div id="mdsPage"></div>
@@ -461,6 +475,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261013-1320"></script>
+<script type="module" src="app/ui.js?v=20261013-1333"></script>
 </body>
 </html>

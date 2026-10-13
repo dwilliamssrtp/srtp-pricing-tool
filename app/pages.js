@@ -12,7 +12,7 @@
    ===================================================================== */
 
 export function initPages(api) {
-  const PAGES = ["designer", "mds", "quotes", "archive", "pricing", "users"];
+  const PAGES = ["designer", "mds", "cds", "quotes", "archive", "pricing", "users"];
   let page = "designer";
 
   function render() {
@@ -36,6 +36,7 @@ export function initPages(api) {
     if (page === "quotes")  document.getElementById("quotesPage").innerHTML  = api.quotesHTML();
     if (page === "archive") document.getElementById("archivePage").innerHTML = api.archiveHTML();
     if (page === "mds")     document.getElementById("mdsPage").innerHTML      = api.mdsHTML();
+    if (page === "cds")     document.getElementById("cdsPage").innerHTML      = api.cdsHTML();
   }
 
   function setPage(p) {
