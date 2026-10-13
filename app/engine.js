@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode
-} from "./data.js?v=20261013-1343";
+} from "./data.js?v=20261013-1439";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -291,20 +291,19 @@ export function solve(inp) {
   o.projectCost  = o.costPerFt  * o.lengthFt;
   o.projectPrice = o.sellPerFt  * o.lengthFt;
   o.projectWeight = o.weightPerFt * o.lengthFt;
-  /* Product code, e.g. FL6000LPSJPPUVHT: application, nominal size in
-     thousandths, L + liner code, J + jacket code. Replaces the long
-     descriptive title that used to run OD/ID/psi/degF - that detail is still
-     on the MDS, in its header and its print legend. */
+  /* The printed label, e.g. FL6000P2600T105LPSJPP: application, nominal size
+     in thousandths, P + MAOP in psi, T + design temperature in C, L + liner,
+     J + jacket. This is what goes on the pipe. */
   o.productCode = (APP_CODES[o.app] || String(o.app || "").toUpperCase().replace(/[^A-Z0-9]/g, ""))
                 + sizeCode(o.sizeKey)
+                + "P" + Math.round(o.psi)
+                + "T" + Math.round(o.degC)
                 + "L" + matCode(o.liner)
                 + "J" + matCode(o.jacket);                              // G4
   o.productName = o.productCode;
-  /* The code carries no pressure, and temperature only as far as the grade
-     implies it, so two duties can share one. The price-history signature
-     keeps them apart - otherwise a 6in 1500psi line would be compared
-     against a 6in 3000psi one and the repeat-price warning would be wrong. */
-  o.productKey  = `${o.productCode}-${o.psi}-${o.degF}`;
+  /* Pressure and temperature are in the label now, so it identifies a duty on
+     its own and the price history can key straight off it. */
+  o.productKey  = o.productCode;
   o.productDesc = `OD:${o.sizeKey}in ID:${o.linerID}in ${o.psi}psi ${o.degF}°F `
                 + `L${matLabel(o.liner)} J${matLabel(o.jacket)}`;
   // Display forms of each selected material, for the renderers to print.

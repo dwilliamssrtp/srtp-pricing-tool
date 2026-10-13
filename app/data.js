@@ -48,7 +48,7 @@ const MATERIALS = {
      short display label. The KEY stays as the workbook wrote it, because the
      price book, saved designs and quote lines all reference it. */
   "PPUVHSWHHT - WashPenn PreBlended HT PP": { sg:0.96, alt:"", comp:null, acr:"PP",
-                                              display:"PPUVHT", code:"PPUVHT" },
+                                              display:"PPUVHT" },
   "PPMBUVWH - White Color Concentrate":     { sg:0.90, alt:"",  comp:null, acr:""   },
   "PPMBUVYL - Yellow LPG":                  { sg:0.90, alt:"",  comp:null, acr:""   },
   "PVDF (Kynar)":                           { sg:1.87, alt:"", comp:null, acr:"PV" }
@@ -253,16 +253,15 @@ export const LONGS_LADDER = (() => { const a=[]; for (let q=4; q<=200; q+=4) a.p
 
 /* What a material is called on screen and in print. Falls back to the key, so
    only materials that need a shorter name have to declare one. */
-/* Short codes for the product code, e.g. FL6000LPSJPPUVHT.
+/* Short codes for the printed label, e.g. FL6000P2600T105LPSJPP.
 
-   `acr` already carries the workbook's two-letter polymer codes (PPS -> PS),
-   so `code` is only needed where those collide: both PP grades carry acr
-   "PP", and the HT grade has to stay distinguishable from plain PP.
-
-   The vocabulary is the user's: PA nylon, PP polypropylene, PS PPS, PPUVHT
-   the HT polypropylene. Both nylons are therefore PA, which is fine - 290Z
-   is only ever a BACKER, and the code is built from the liner and jacket
-   alone, so the two can never collide in a code. */
+   `acr` carries the workbook's two-letter polymer codes and the label uses
+   them as they stand: PA nylon, PP polypropylene, PS PPS. Both PP grades are
+   therefore PP on the label - the code's own T<degC> already says which one,
+   so repeating the grade would be noise. The MDS, the quote and the price
+   book still NAME the HT grade PPUVHT through `display`; only the label is
+   short. Both nylons are PA for the same reason, and harmlessly so: 290Z is
+   only ever a backer, and the label is built from the liner and jacket. */
 export const matCode = key => {
   const k = (key || "").trim();
   /* Sour service at 185F has no tabulated grade - the sheet answers
@@ -270,7 +269,7 @@ export const matCode = key => {
      code; "??" says plainly that the grade is unresolved. */
   if (!k || k === "Select 196°F") return "??";
   const m = MATERIALS[k] || {};
-  return String(m.code || m.acr || m.display || k).replace(/[^A-Za-z0-9]/g, "");
+  return String(m.acr || m.display || k).replace(/[^A-Za-z0-9]/g, "");
 };
 
 export const APP_CODES = { "Flowline":"FL", "24-Tensile":"24T",
