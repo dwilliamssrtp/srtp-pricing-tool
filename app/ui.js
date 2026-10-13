@@ -6,14 +6,14 @@ import {
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER,
   CDS_FITTINGS
-} from "./data.js?v=20261013-1333";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1333";
-import * as DB from "./db.js?v=20261013-1333";
-import { initPages } from "./pages.js?v=20261013-1333";
-import * as PARTSUI from "./partsui.js?v=20261013-1333";
-import * as QUOTESUI from "./quotesui.js?v=20261013-1333";
-import * as MDS from "./mds.js?v=20261013-1333";
-import { optimise, designRules } from "./optimise.js?v=20261013-1333";
+} from "./data.js?v=20261013-1334";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1334";
+import * as DB from "./db.js?v=20261013-1334";
+import { initPages } from "./pages.js?v=20261013-1334";
+import * as PARTSUI from "./partsui.js?v=20261013-1334";
+import * as QUOTESUI from "./quotesui.js?v=20261013-1334";
+import * as MDS from "./mds.js?v=20261013-1334";
+import { optimise, designRules } from "./optimise.js?v=20261013-1334";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -26,7 +26,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261013-1333";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261013-1334";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -593,7 +593,7 @@ export function cdsHTML() {
     ["Ribs / max pressure",{v:f0(r.couplingRibs),n:1},"ribs",{v:f0(r.couplingMaxP),n:1},"psi"]
   ]);
 
-  const fittings = tbl(["Nominal pipe",{t:"OD post swage",n:1},"",{t:"Insert ID",n:1},""],
+  const fittings = tbl(["Design pipe size",{t:"OD post swage",n:1},"",{t:"Insert ID",n:1},""],
     CDS_FITTINGS.map(([size, od, id]) => ({
       cls: size === r.sizeKey ? "cur" : "",
       cells: [ size, {v:od==null?"—":f3(od),n:1},"in", {v:id==null?"—":f3(id),n:1},"in" ]
@@ -621,7 +621,7 @@ export function cdsHTML() {
             <div>${card("Parameters", par)}</div>
           </div>`
        + card("Fittings reference", fittings,
-              "CDS!L6:N23 &middot; by nominal pipe size");
+              "CDS!L6:N23 &middot; by design pipe size");
 }
 
 function sheetWO(r) {
