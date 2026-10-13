@@ -4,8 +4,9 @@
    Rendered into the Pricing page. Read-only for viewers and estimators,
    editable for admins, which is what the RLS policies allow.
    ===================================================================== */
-import * as DB from "./db.js?v=20261012-1658";
-import { ANSI_CLASSES } from "./parts.js?v=20261012-1658";
+import * as DB from "./db.js?v=20261013-0923";
+import { ANSI_CLASSES } from "./parts.js?v=20261013-0923";
+import { PIPE_ORDER } from "./data.js?v=20261013-0923";
 
 const PART_KIND_LABEL = {
   end_flange: "End flanges", lap_flange: "Lap flanges",
@@ -112,8 +113,17 @@ export function speedsSection() {
         n: 1, raw: true }
     : { v: s[field] == null ? "—" : String(s[field]), n: 1 };
 
+  /* Object.keys hoists integer-like keys, so plain iteration lists 1, 3, 4,
+     5, 6 and only then 1.25, 1.5, 1.75, 2.375 - every half size after the
+     whole ones. Order by the canonical pipe list instead, and numerically
+     for anything not on it. */
+  const sizeRank = sz => {
+    const i = PIPE_ORDER.indexOf(String(sz));
+    return i === -1 ? PIPE_ORDER.length + (parseFloat(sz) || 0) : i;
+  };
+
   const rows = [];
-  for (const size of Object.keys(bySize)) {
+  for (const size of Object.keys(bySize).sort((a, b) => sizeRank(a) - sizeRank(b))) {
     rows.push({ group: `${size} in pipe` });
     for (const s of bySize[size]) {
       const rate = s.ft_per_min == null ? null

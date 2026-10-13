@@ -48,7 +48,7 @@ const MATERIALS = {
      short display label. The KEY stays as the workbook wrote it, because the
      price book, saved designs and quote lines all reference it. */
   "PPUVHSWHHT - WashPenn PreBlended HT PP": { sg:0.96, alt:"", comp:null, acr:"PP",
-                                              display:"PPUVHSWHHT", code:"PPUVHT" },
+                                              display:"PPUVHT", code:"PPUVHT" },
   "PPMBUVWH - White Color Concentrate":     { sg:0.90, alt:"",  comp:null, acr:""   },
   "PPMBUVYL - Yellow LPG":                  { sg:0.90, alt:"",  comp:null, acr:""   },
   "PVDF (Kynar)":                           { sg:1.87, alt:"", comp:null, acr:"PV" }
