@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261014-1220";
-import { solve, requiredYarnType } from "./engine.js?v=20261014-1220";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261014-1252";
+import { solve, requiredYarnType } from "./engine.js?v=20261014-1252";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -183,15 +183,24 @@ export function optimise(base, prices, opts = {}) {
      chosen objective costs against the other without searching twice. */
   const byCost   = [...tried].sort(rankCheapest);
   const byPasses = [...tried].sort(rankFewestPasses);
-  const objective = opts.objective === "fewest_passes" ? "fewest_passes" : "cheapest";
-  const best = (objective === "fewest_passes" ? byPasses : byCost)[0] || null;
+  const byTwo    = tried.filter(t => t.inputs.passes === 2).sort(rankCheapest);
+  const objective = ["fewest_passes", "two_pass"].includes(opts.objective)
+    ? opts.objective : "cheapest";
+  /* If nothing runs in two passes, fall back to the cheapest rather than
+     returning nothing; the caller says so in its note. */
+  const best = objective === "fewest_passes" ? (byPasses[0] || null)
+             : objective === "two_pass"      ? (byTwo[0] || byCost[0] || null)
+             : (byCost[0] || null);
 
   return {
     best, objective,
     cheapest:     byCost[0]   || null,
     fewestPasses: byPasses[0] || null,
+    twoPass:      byTwo[0]    || null,
     nearest: best ? null : nearest,
-    tried: (objective === "fewest_passes" ? byPasses : byCost).slice(0, 8),
+    tried: (objective === "fewest_passes" ? byPasses
+          : objective === "two_pass" ? (byTwo.length ? byTwo : byCost)
+          : byCost).slice(0, 8),
     considered,
     elapsedMs: Math.round(performance.now() - t0)
   };

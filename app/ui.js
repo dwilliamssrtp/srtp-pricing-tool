@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-1220";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1220";
-import * as DB from "./db.js?v=20261014-1220";
-import { initPages } from "./pages.js?v=20261014-1220";
-import * as PARTSUI from "./partsui.js?v=20261014-1220";
-import * as QUOTESUI from "./quotesui.js?v=20261014-1220";
-import * as MDS from "./mds.js?v=20261014-1220";
-import { optimise, designRules } from "./optimise.js?v=20261014-1220";
+} from "./data.js?v=20261014-1252";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1252";
+import * as DB from "./db.js?v=20261014-1252";
+import { initPages } from "./pages.js?v=20261014-1252";
+import * as PARTSUI from "./partsui.js?v=20261014-1252";
+import * as QUOTESUI from "./quotesui.js?v=20261014-1252";
+import * as MDS from "./mds.js?v=20261014-1252";
+import { optimise, designRules } from "./optimise.js?v=20261014-1252";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-1220";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-1252";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -247,6 +247,7 @@ function renderInputs() {
     `<label for="autoMode">Optimise for</label>
      <select id="autoMode" style="grid-column:2/-1">
        <option value="cheapest"${AUTO_MODE === "cheapest" ? " selected" : ""}>Cheapest $/ft</option>
+       <option value="two_pass"${AUTO_MODE === "two_pass" ? " selected" : ""}>Cheapest at 2 passes</option>
        <option value="fewest_passes"${AUTO_MODE === "fewest_passes" ? " selected" : ""}>Easiest to make &mdash; fewest passes</option>
      </select>`,
     `<label>&nbsp;</label><div class="derived" style="grid-column:2/-1">
@@ -566,13 +567,16 @@ function sheetMDS2(r) {
 const ART = {
   src: "assets/rtp-layers-2up.webp", W: 1774, H: 887, fill: "#f1f4f6",
   multi: { y: 0, h: 468,
-    callouts: [ { k:"liner", x:61, y:13, w:302 }, { k:"bond", x:421, y:13, w:253 },
-                { k:"backer", x:712, y:13, w:232 }, { k:"braid", x:1007, y:13, w:282 },
-                { k:"jacket", x:1431, y:13, w:290 } ],
+    callouts: [ { k:"liner", x:61, y:13, w:302, max:110 },
+                { k:"bond", x:421, y:13, w:253, max:157 },
+                { k:"backer", x:712, y:13, w:232, max:129 },
+                { k:"braid", x:1007, y:13, w:282, max:111 },
+                { k:"jacket", x:1431, y:13, w:290, max:133 } ],
     print: { x:1315, y:243, w:392, h:86 } },
   single: { y: 508, h: 379,
-    callouts: [ { k:"liner", x:260, y:548, w:310 }, { k:"braid", x:834, y:536, w:307 },
-                { k:"jacket", x:1396, y:524, w:340 } ],
+    callouts: [ { k:"liner", x:260, y:548, w:310, max:126 },
+                { k:"braid", x:834, y:536, w:307, max:88 },
+                { k:"jacket", x:1396, y:524, w:340, max:110 } ],
     print: { x:1339, y:712, w:349, h:80 } }
 };
 /* The artwork's own copy, kept so a redrawn callout reads as the original. */
@@ -606,20 +610,29 @@ function pipeFigure(r) {
   const P = single ? ART.single : ART.multi;
 
   const braidName = (r.xbraid || "").replace(/ \(.*/, "");
-  const NAME = { liner: matLabel(r.liner), bond: matLabel(r.bond),
-                 backer: matLabel(r.backer), braid: braidName, jacket: matLabel(r.jacket) };
+  /* Lotader and Admer are the bond grade and Technora/Twaron the braid, but
+     neither is what a customer is being told here - the layer is a bond
+     layer and the reinforcement is aramid either way. The grades stay on the
+     key, the MDS and the quote. */
+  const NAME = { liner: matLabel(r.liner), bond: "Bond Layer",
+                 backer: matLabel(r.backer), braid: "Aramid Reinforcement",
+                 jacket: matLabel(r.jacket) };
 
-  const HEAD = 27, BODY = 22, PADX = 13, PADY = 10, LEAD = 26;
+  const HEAD = 23, PADX = 12, PADY = 8;
   const callouts = P.callouts.map(cz => {
-    const lines = artWrap(ART_BLURB[cz.k], cz.w - PADX * 2, BODY);
-    const h = PADY * 2 + HEAD + 6 + lines.length * LEAD;
-    const tx = cz.x + PADX;
+    let body = 18, lines, h;
+    for (;; body -= 1) {
+      lines = artWrap(ART_BLURB[cz.k], cz.w - PADX * 2, body);
+      h = PADY * 2 + HEAD + 5 + lines.length * (body + 4);
+      if (h <= cz.max || body <= 11) break;
+    }
+    const lead = body + 4, tx = cz.x + PADX;
     return `<rect x="${cz.x}" y="${cz.y}" width="${cz.w}" height="${h}" rx="7"
               fill="${ART.fill}"/>
-            <text x="${tx}" y="${cz.y + PADY + HEAD - 5}" class="ah">${esc(NAME[cz.k] || "")}</text>`
+            <text x="${tx}" y="${cz.y + PADY + HEAD - 4}" class="ah">${esc(NAME[cz.k] || "")}</text>`
          + lines.map((ln, n) =>
-             `<text x="${tx}" y="${cz.y + PADY + HEAD + 6 + LEAD * n + BODY - 5}"
-                class="ab">${esc(ln)}</text>`).join("");
+             `<text x="${tx}" y="${cz.y + PADY + HEAD + 5 + lead * n + body - 4}"
+                class="ab" style="font-size:${body}px">${esc(ln)}</text>`).join("");
   }).join("");
 
   /* The print on the jacket, between the artwork's two rules. */
@@ -634,7 +647,7 @@ function pipeFigure(r) {
       aria-label="Construction of ${esc(r.productCode)}">
     <style>
       .ah{font:700 ${HEAD}px var(--sans,sans-serif);fill:#14365f}
-      .ab{font:400 ${BODY}px var(--sans,sans-serif);fill:#2d3a47}
+      .ab{font:400 16px var(--sans,sans-serif);fill:#2d3a47}
       .ap{font:400 20px var(--mono,monospace);fill:#1a1a1a}
       .apb{font:700 20px var(--mono,monospace);fill:#1a1a1a}
     </style>
@@ -1609,13 +1622,18 @@ function runOptimise(announce) {
     });
     const w = res.best.warnings.length ? ` — ${res.best.warnings.join("; ")}` : "";
     const pl = n => `${n} pass${n > 1 ? "es" : ""}`;
+    /* Say so when two passes was asked for and nothing ran in two. */
+    const twoMissed = AUTO_MODE === "two_pass" && res.best.inputs.passes !== 2;
     const lead = AUTO_MODE === "fewest_passes"
       ? `Easiest: ${pl(res.best.inputs.passes)}, ${money(res.best.costPerFt)}/ft`
+      : AUTO_MODE === "two_pass"
+      ? `${twoMissed ? "Nothing runs in 2 passes — cheapest" : "Cheapest at 2 passes"}: `
+        + `${money(res.best.costPerFt)}/ft, ${pl(res.best.inputs.passes)}`
       : `Cheapest: ${money(res.best.costPerFt)}/ft, ${pl(res.best.inputs.passes)}`;
 
     /* Name the trade-off only when the two objectives actually disagree, so
        the premium for an easier build is visible rather than implied. */
-    const other = AUTO_MODE === "fewest_passes" ? res.cheapest : res.fewestPasses;
+    const other = AUTO_MODE === "cheapest" ? res.fewestPasses : res.cheapest;
     let diff = "";
     if (other && other.inputs.passes !== res.best.inputs.passes) {
       /* Say "more" or "less" from the actual sign, not from the mode. The
@@ -1627,11 +1645,10 @@ function runOptimise(announce) {
       const d = other.costPerFt - res.best.costPerFt;
       const why = other.warnings.length && d < 0
         ? ` but ${other.warnings.join("; ")}` : "";
-      diff = AUTO_MODE === "fewest_passes"
-        ? ` Cheapest would be ${pl(other.inputs.passes)} at ${money(other.costPerFt)}/ft, `
-          + `${money(Math.abs(d))}/ft ${d < 0 ? "less" : "more"}${why}.`
-        : ` Fewest passes would be ${other.inputs.passes} at ${money(other.costPerFt)}/ft, `
-          + `${money(Math.abs(d))}/ft ${d < 0 ? "less" : "more"}${why}.`;
+      const otherName = AUTO_MODE === "cheapest" ? "Fewest passes" : "Cheapest";
+      diff = ` ${otherName} would be ${pl(other.inputs.passes)} at `
+           + `${money(other.costPerFt)}/ft, ${money(Math.abs(d))}/ft `
+           + `${d < 0 ? "less" : "more"}${why}.`;
     }
     OPT_NOTE = `${lead}, ${f0(res.best.burst)} psi burst${w}.${diff}`;
   } else if (res.nearest) {
