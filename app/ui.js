@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261013-1439";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261013-1439";
-import * as DB from "./db.js?v=20261013-1439";
-import { initPages } from "./pages.js?v=20261013-1439";
-import * as PARTSUI from "./partsui.js?v=20261013-1439";
-import * as QUOTESUI from "./quotesui.js?v=20261013-1439";
-import * as MDS from "./mds.js?v=20261013-1439";
-import { optimise, designRules } from "./optimise.js?v=20261013-1439";
+} from "./data.js?v=20261014-1115";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1115";
+import * as DB from "./db.js?v=20261014-1115";
+import { initPages } from "./pages.js?v=20261014-1115";
+import * as PARTSUI from "./partsui.js?v=20261014-1115";
+import * as QUOTESUI from "./quotesui.js?v=20261014-1115";
+import * as MDS from "./mds.js?v=20261014-1115";
+import { optimise, designRules } from "./optimise.js?v=20261014-1115";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261013-1439";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-1115";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -562,7 +562,7 @@ function sheetMDS2(r) {
 const FIG_INK = { base:["#f4f4f2", "#d4dade", "#c9a46c"], braid:"#b8873f", jacket:"#ebebe9" };
 
 function pipeFigure(r) {
-  if (!(r.jacketOD > 0)) return "";
+  if (!(r.jacketOD > 0)) return { svg:"", legend:[] };
 
   /* Real layers, inside out, merging neighbours of the SAME material: the
      engine always reports three base walls, and a water pipe reports
@@ -578,90 +578,90 @@ function pipeFigure(r) {
   if (r.jacketID > reinfID)
     add("Reinforcement", reinfID, r.jacketID, "braid", (r.xbraid || "").replace(/ \(.*/, ""));
   add(matLabel(r.jacket), r.jacketID, r.jacketOD, "jacket");
-  if (!layers.length) return "";
+  if (!layers.length) return { svg:"", legend:[] };
 
-  const W = 1000, PAD = 28, MINBAND = 11, STEP = 98;
-  const maxR = 104;
+  /* Sized to the v7 CDS picture: 265 x 133 pt, about half the page width.
+     At that size a name beside every band cannot be read, so the bands
+     carry numbers and the names go in a legend underneath, where they are
+     real selectable text rather than tiny glyphs inside the drawing. */
+  const W = 520, PAD = 16, MINBAND = 7, STEP = 46, maxR = 58;
   const scale = maxR / (r.jacketOD / 2);
-  let rad = Math.max((r.linerID / 2) * scale, 20);
+  let rad = Math.max((r.linerID / 2) * scale, 12);
   const bore = rad;
   let baseSeen = 0;
   const bands = layers.map((L, i) => {
     const w = Math.max(((L.od - L.id) / 2) * scale, MINBAND);
-    const b = { ...L, r0: rad, r1: rad + w, x: PAD + i * STEP,
-                fill: L.role === "base"   ? FIG_INK.base[Math.min(baseSeen++, 2)]
-                    : L.role === "braid"  ? FIG_INK.braid : FIG_INK.jacket };
+    const b = { ...L, n: i + 1, r0: rad, r1: rad + w, x: PAD + i * STEP,
+                fill: L.role === "base"  ? FIG_INK.base[Math.min(baseSeen++, 2)]
+                    : L.role === "braid" ? FIG_INK.braid : FIG_INK.jacket };
     rad += w; return b;
   });
-  const cy = rad + 86, H = cy + rad + 116, xR = W - PAD;
+  const cy = rad + 20, H = cy + rad + 34, xR = W - PAD;
 
   /* Painted outward, each layer covering the one inside it from its own
      left edge, which is what produces the stepped cut. */
   const tube = bands.map(b => {
-    const h = b.r1, rx = 13;
+    const h = b.r1, rx = 7;
     return `<path d="M ${b.x} ${cy - h} H ${xR} V ${cy + h} H ${b.x}
               A ${rx} ${h} 0 0 1 ${b.x} ${cy - h} Z" fill="${b.fill}"
-              stroke="#8d8d8a" stroke-width="1"/>`
+              stroke="#8d8d8a" stroke-width="0.7"/>`
          + (b.role === "braid"
              ? `<rect x="${b.x}" y="${cy - b.r1}" width="${xR - b.x}"
                   height="${b.r1 - b.r0}" fill="url(#weave)"/>
                 <rect x="${b.x}" y="${cy + b.r0}" width="${xR - b.x}"
                   height="${b.r1 - b.r0}" fill="url(#weave)"/>` : "")
          + `<ellipse cx="${b.x}" cy="${cy}" rx="${rx}" ry="${h}" fill="${b.fill}"
-              stroke="#8d8d8a" stroke-width="1"/>`
+              stroke="#8d8d8a" stroke-width="0.7"/>`
          + (b.role === "braid"
              ? `<ellipse cx="${b.x}" cy="${cy}" rx="${rx}" ry="${h}" fill="url(#weave)"
                   stroke="none"/>` : "");
   }).join("");
 
-  const borehole = `<ellipse cx="${PAD}" cy="${cy}" rx="13" ry="${bore}" fill="#2b3036"/>`;
+  const borehole = `<ellipse cx="${PAD}" cy="${cy}" rx="7" ry="${bore}" fill="#2b3036"/>`;
 
-  /* Leaders run up from each layer's exposed face to its name. */
-  const leaders = bands.map((b, i) => {
-    const x = b.x + 30, yTop = 38 + (i % 3) * 27, yLayer = cy - (b.r0 + b.r1) / 2;
-    return `<line x1="${x}" y1="${yTop + 6}" x2="${x}" y2="${yLayer}"
-              stroke="#d2690f" stroke-width="1.4"/>
-            <circle cx="${x}" cy="${yLayer}" r="3" fill="#d2690f"/>
-            <text x="${x}" y="${yTop}" text-anchor="middle" class="fl">${esc(b.name)}</text>
-            <text x="${x}" y="${yTop + 13}" text-anchor="middle" class="fs">${
-              b.note ? esc(b.note) + " &middot; " : ""}${
-              f3(Math.abs(b.od - b.id) / 2)}&Prime;</text>`;
+  /* A number on each exposed face, keyed to the legend. */
+  const marks = bands.map(b => {
+    const x = b.x + 16, y = cy - (b.r0 + b.r1) / 2;
+    return `<circle cx="${x}" cy="${y}" r="7.5" fill="#ffffff" stroke="#d2690f"
+              stroke-width="1.2"/>
+            <text x="${x}" y="${y + 3.4}" text-anchor="middle" class="fn">${b.n}</text>`;
   }).join("");
 
-  /* The print legend, on the jacket, exactly as it goes on the pipe. */
-  const plate = `
-    <rect x="${xR - 400}" y="${cy - 30}" width="366" height="60" rx="5"
-      fill="#ffffff" stroke="#9a9a97" stroke-width="1"/>
-    <text x="${xR - 217}" y="${cy - 12}" text-anchor="middle" class="fp">${esc(r.printLine1)}</text>
-    <text x="${xR - 217}" y="${cy + 3}" text-anchor="middle" class="fpb">${esc(r.productCode)}</text>
-    <text x="${xR - 217}" y="${cy + 19}" text-anchor="middle" class="fp">${esc(r.printLine2)}</text>`;
+  /* The pipe carries its code, as the real print does. The full legend is
+     set beneath the figure where it can actually be read. */
+  const plateW = Math.min(196, xR - (bands[bands.length - 1].x + 34));
+  const plate = plateW < 90 ? "" : `
+    <rect x="${xR - plateW - 12}" y="${cy - 9}" width="${plateW}" height="18" rx="2.5"
+      fill="#ffffff" stroke="#9a9a97" stroke-width="0.7"/>
+    <text x="${xR - plateW / 2 - 12}" y="${cy + 3.5}" text-anchor="middle"
+      class="fpb">${esc(r.productCode)}</text>`;
 
   const dims = `
-    <text x="${PAD}" y="${H - 58}" class="fs">ID ${f3(r.linerID)}&Prime;</text>
-    <text x="${xR}" y="${H - 58}" text-anchor="end" class="fs">OD ${f3(r.jacketOD)}&Prime;</text>
-    <text x="${W / 2}" y="${H - 58}" text-anchor="middle" class="fs">${
-      layers.length} layer${layers.length > 1 ? "s" : ""} &middot; ${
-      f3(r.weightPerFt)} lb/ft</text>`;
+    <text x="${PAD}" y="${H - 9}" class="fs">ID ${f3(r.linerID)}&Prime;</text>
+    <text x="${xR}" y="${H - 9}" text-anchor="end" class="fs">OD ${f3(r.jacketOD)}&Prime;</text>`;
 
-  return `<svg class="pipefig" viewBox="0 0 ${W} ${H}" role="img"
+  const svg = `<svg class="pipefig" viewBox="0 0 ${W} ${H}" role="img"
       aria-label="Construction of ${esc(r.productCode)}">
     <defs>
-      <pattern id="weave" width="11" height="11" patternUnits="userSpaceOnUse">
-        <path d="M-2 2 l6 -6 M0 11 l11 -11 M7 13 l6 -6"
-          stroke="#7d5720" stroke-width="2.6" opacity="0.5"/>
-        <path d="M-2 9 l6 6 M0 0 l11 11 M7 -2 l6 6"
-          stroke="#e0c08a" stroke-width="2.6" opacity="0.55"/>
+      <pattern id="weave" width="7" height="7" patternUnits="userSpaceOnUse">
+        <path d="M-1 1 l4 -4 M0 7 l7 -7 M4 8 l4 -4"
+          stroke="#7d5720" stroke-width="1.7" opacity="0.5"/>
+        <path d="M-1 6 l4 4 M0 0 l7 7 M4 -1 l4 4"
+          stroke="#e0c08a" stroke-width="1.7" opacity="0.55"/>
       </pattern>
     </defs>
     <style>
-      .fl{font:600 15px var(--sans,sans-serif);fill:#23282d}
-      .fs{font:400 12px var(--sans,sans-serif);fill:#6a7076}
-      .fp{font:400 10.5px var(--mono,monospace);fill:#23282d}
-      .fpb{font:700 12.5px var(--mono,monospace);fill:#23282d}
+      .fn{font:700 9px var(--sans,sans-serif);fill:#d2690f}
+      .fs{font:400 9px var(--sans,sans-serif);fill:#6a7076}
+      .fpb{font:700 8.5px var(--mono,monospace);fill:#23282d}
     </style>
     <rect width="${W}" height="${H}" fill="#ffffff"/>
-    ${tube}${borehole}${plate}${leaders}${dims}
+    ${tube}${borehole}${plate}${marks}${dims}
   </svg>`;
+
+  return { svg, legend: bands.map(b => ({
+    n: b.n, name: b.name, note: b.note,
+    wall: f3(Math.abs(b.od - b.id) / 2) })) };
 }
 
 /* The CDS is its own page rather than a strip entry, and it is the sheet
@@ -717,10 +717,16 @@ export function cdsHTML() {
   /* The artwork is generic; naming this design's own layers under it is what
      ties it to the sheet. onerror drops the figure cleanly if the file is
      missing rather than leaving a broken image on a customer document. */
-  const fig = `<figure class="layerfig">${pipeFigure(r)}
+  const F = pipeFigure(r);
+  const fig = `<figure class="layerfig">${F.svg}
+      <ol class="figkey">${F.legend.map(L =>
+        `<li><i><b>${esc(L.name)}</b>${L.note ? " " + esc(L.note) : ""}</i>`
+        + `<span>${L.wall}&Prime;</span></li>`).join("")}</ol>
+      <div class="figprint"><span>${esc(r.printLine1)}</span>
+        <b>${esc(r.productCode)}</b><span>${esc(r.printLine2)}</span></div>
       <figcaption>Drawn from this design. Walls are to scale except that a band
-        thinner than the drawing can show is opened up to stay readable &mdash; each
-        carries its true wall above it.</figcaption>
+        too thin to show is opened up to stay visible &mdash; each carries its true
+        wall in the key.</figcaption>
     </figure>`;
 
   const card = (title, body, sub) =>
