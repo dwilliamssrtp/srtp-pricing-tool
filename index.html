@@ -233,6 +233,34 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 
 /* ---------- Manufacturing Datasheet: a document, not a dashboard ---------- */
 .sheetwrap{display:flex;justify-content:center;margin-top:12px;overflow-x:auto}
+/* The CDS goes to a customer, so on screen it IS the printed page: a letter
+   sheet at its real size, not a dark app panel that prints differently. Every
+   rule the print block used to own lives here instead, so the two cannot
+   drift apart - print then only has to flatten the shell. */
+.cdsdoc{width:8.5in;flex:0 0 auto;min-height:11in;background:#fff;color:#111;
+  padding:0.3in 0.4in;border:1px solid var(--line);border-radius:4px;
+  font-family:var(--sans);box-shadow:0 2px 14px rgba(0,0,0,.3)}
+.cdsdoc *{color:#111}
+.cdsdoc .card{background:#fff;border:1px solid #bbb;border-radius:5px;
+  box-shadow:none;margin-bottom:3px;break-inside:avoid}
+.cdsdoc .card>h3{padding:3px 8px;background:#f1f1f1;border-bottom:1px solid #ddd;
+  color:#333}
+.cdsdoc .card>h3 small{color:#666}
+.cdsdoc .pad{padding:5px 8px}
+.cdsdoc td,.cdsdoc th{padding:2px 6px;border-color:#ccc}
+.cdsdoc thead th,.cdsdoc .grp2 td{background:#eee;color:#333}
+.cdsdoc .two{display:block}
+.cdsdoc .layerfig,.cdsdoc .layerfig .pipefig{max-width:none}
+.cdsdoc .layerfig figcaption{display:none}
+.cdsdoc .figkey{margin-top:5px}
+.cdsdoc .figkey li{line-height:1.4;color:#333}
+.cdsdoc .figkey li::before{color:#333;border-color:#999}
+.cdsdoc .figkey li span{color:#555}
+.cdsdoc .figprint{margin-top:4px;line-height:1.35;padding:5px 7px;
+  border-color:#bbb;color:#333}
+.cdsdoc .figkey li b,.cdsdoc .figprint b{color:#111}
+.cdsdoc td.k,.cdsdoc th.k{color:#444}
+.cdsdoc .layerfig,.cdsdoc table{break-inside:avoid}
 .mdsdoc{width:8.5in;flex:0 0 auto;min-height:11in;background:#fff;color:#111;padding:0.5in 0.55in;
   border:1px solid var(--line);border-radius:4px;font-family:var(--sans);
   box-shadow:0 2px 14px rgba(0,0,0,.3)}
@@ -288,24 +316,10 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   /* The CDS is sent to customers, so it prints as a document rather than as
      a screenshot of a dark UI: white cards, black text, and the construction
      diagram kept whole on its page. */
-  #page-cds{padding:0.3in 0.4in}
-  #page-cds *{color:#000!important}
-  #page-cds .card{background:#fff;border:1px solid #bbb;box-shadow:none;
-    page-break-inside:avoid;margin-bottom:3px}
-  #page-cds .card h3{padding:3px 8px}
-  #page-cds .pad{padding:5px 8px}
-  #page-cds td,#page-cds th{padding:2px 6px!important}
-  #page-cds .layerfig,#page-cds table{page-break-inside:avoid}
-  #page-cds .layerfig,#page-cds .layerfig .pipefig{max-width:none}
-  #page-cds .layerfig figcaption{display:none}
-  #page-cds .figkey{margin-top:5px}
-  #page-cds .figkey li{line-height:1.4}
-  #page-cds .figprint{margin-top:4px;line-height:1.35;padding:5px 7px}
-  #page-cds th,#page-cds td{border-color:#ccc!important}
-  #page-cds thead th,#page-cds .grp2 td{background:#eee!important}
-  /* Side by side the Parameters rows wrap and the sheet gets TALLER, so
-     these stay stacked - measured, not assumed. */
-  #page-cds .two{display:block}
+  /* The sheet already looks like this on screen; printing only drops the
+     page chrome around it. Side by side the Parameters rows wrap and the
+     sheet gets TALLER, so Duty and Parameters stay stacked - measured. */
+  .cdsdoc{width:auto;min-height:auto;border:0;border-radius:0;box-shadow:none}
 }
 
 /* ---------- sign-in gate ---------- */
@@ -516,6 +530,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261014-1135"></script>
+<script type="module" src="app/ui.js?v=20261014-1141"></script>
 </body>
 </html>

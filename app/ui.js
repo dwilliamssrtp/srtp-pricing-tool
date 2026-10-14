@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-1135";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1135";
-import * as DB from "./db.js?v=20261014-1135";
-import { initPages } from "./pages.js?v=20261014-1135";
-import * as PARTSUI from "./partsui.js?v=20261014-1135";
-import * as QUOTESUI from "./quotesui.js?v=20261014-1135";
-import * as MDS from "./mds.js?v=20261014-1135";
-import { optimise, designRules } from "./optimise.js?v=20261014-1135";
+} from "./data.js?v=20261014-1141";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1141";
+import * as DB from "./db.js?v=20261014-1141";
+import { initPages } from "./pages.js?v=20261014-1141";
+import * as PARTSUI from "./partsui.js?v=20261014-1141";
+import * as QUOTESUI from "./quotesui.js?v=20261014-1141";
+import * as MDS from "./mds.js?v=20261014-1141";
+import { optimise, designRules } from "./optimise.js?v=20261014-1141";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-1135";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-1141";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -753,11 +753,13 @@ export function cdsHTML() {
       sub?` <small>${sub}</small>`:""}</h3><div class="pad">${body}</div></div>`;
 
   return picker
+       + `<div class="sheetwrap"><article class="cdsdoc">`
        + card("Construction", fig + cons)
        + `<div class="two">
             <div>${card("Duty &amp; standard", head)}</div>
             <div>${card("Parameters", par)}</div>
-          </div>`;
+          </div>`
+       + `</article></div>`;
 }
 
 function sheetWO(r) {
