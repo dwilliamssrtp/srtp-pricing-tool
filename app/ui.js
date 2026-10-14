@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-1124";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1124";
-import * as DB from "./db.js?v=20261014-1124";
-import { initPages } from "./pages.js?v=20261014-1124";
-import * as PARTSUI from "./partsui.js?v=20261014-1124";
-import * as QUOTESUI from "./quotesui.js?v=20261014-1124";
-import * as MDS from "./mds.js?v=20261014-1124";
-import { optimise, designRules } from "./optimise.js?v=20261014-1124";
+} from "./data.js?v=20261014-1135";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1135";
+import * as DB from "./db.js?v=20261014-1135";
+import { initPages } from "./pages.js?v=20261014-1135";
+import * as PARTSUI from "./partsui.js?v=20261014-1135";
+import * as QUOTESUI from "./quotesui.js?v=20261014-1135";
+import * as MDS from "./mds.js?v=20261014-1135";
+import { optimise, designRules } from "./optimise.js?v=20261014-1135";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-1124";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-1135";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -591,7 +591,7 @@ function pipeFigure(r) {
      At that size a name beside every band cannot be read, so the bands
      carry numbers and the names go in a legend underneath, where they are
      real selectable text rather than tiny glyphs inside the drawing. */
-  const W = 520, PAD = 16, MINBAND = 7, STEP = 46, maxR = 58;
+  const W = 780, PAD = 16, MINBAND = 7, STEP = 68, maxR = 46;
   const scale = maxR / (r.jacketOD / 2);
   let rad = Math.max((r.linerID / 2) * scale, 12);
   const bore = rad;
@@ -603,7 +603,7 @@ function pipeFigure(r) {
                     : L.role === "braid" ? FIG_INK.braid : FIG_INK.jacket };
     rad += w; return b;
   });
-  const cy = rad + 20, H = cy + rad + 34, xR = W - PAD;
+  const cy = rad + 13, H = cy + rad + 23, xR = W - PAD;
 
   /* Painted outward, each layer covering the one inside it from its own
      left edge, which is what produces the stepped cut. */
@@ -636,7 +636,7 @@ function pipeFigure(r) {
 
   /* The pipe carries its code, as the real print does. The full legend is
      set beneath the figure where it can actually be read. */
-  const plateW = Math.min(196, xR - (bands[bands.length - 1].x + 34));
+  const plateW = Math.min(250, xR - (bands[bands.length - 1].x + 40));
   const plate = plateW < 90 ? "" : `
     <rect x="${xR - plateW - 12}" y="${cy - 9}" width="${plateW}" height="18" rx="2.5"
       fill="#ffffff" stroke="#9a9a97" stroke-width="0.7"/>
