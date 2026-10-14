@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-1252";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1252";
-import * as DB from "./db.js?v=20261014-1252";
-import { initPages } from "./pages.js?v=20261014-1252";
-import * as PARTSUI from "./partsui.js?v=20261014-1252";
-import * as QUOTESUI from "./quotesui.js?v=20261014-1252";
-import * as MDS from "./mds.js?v=20261014-1252";
-import { optimise, designRules } from "./optimise.js?v=20261014-1252";
+} from "./data.js?v=20261014-1612";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1612";
+import * as DB from "./db.js?v=20261014-1612";
+import { initPages } from "./pages.js?v=20261014-1612";
+import * as PARTSUI from "./partsui.js?v=20261014-1612";
+import * as QUOTESUI from "./quotesui.js?v=20261014-1612";
+import * as MDS from "./mds.js?v=20261014-1612";
+import { optimise, designRules } from "./optimise.js?v=20261014-1612";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -21,11 +21,16 @@ let PRICES = { polymer: {}, braid: {}, coupling: {} };
 let ME = null;                 // the signed-in profile
 let BOOKS = [];                // all books this user may see
 let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
+/* Snapshot of the inputs as last opened or saved. Comparing against it is
+   what lets the save bar say the Designer no longer matches the stored
+   design, instead of leaving you to guess. */
+let BASELINE = null;
+let DESIGN_ROWS = [], DESIGN_SEARCH = "";
 let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-1252";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-1612";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -138,6 +143,7 @@ function updateDerived(r) {
   }
   renderCheck(r);
   renderReels(r);
+  showDirty();
 
   const g = document.getElementById("grp24t");
   if (g) g.innerHTML = "24-Tensile layer " +
@@ -297,7 +303,10 @@ function renderDisplay() {
     ["Reels", f0(r.nReels)]
   ].map(([k,v]) => `<div><em>${k}</em><b>${v}</b></div>`).join("");
 
-  document.getElementById("prodName").textContent = r.productName;
+  const pn = document.getElementById("prodName");
+  pn.textContent = r.productName;
+  pn.dataset.copy = r.productCode;          // the label that goes on the pipe
+  pn.title = "Click to copy " + r.productCode;
 
   document.getElementById("headTiles").innerHTML = tiles([
     { k:"Cost ($/ft)",            v:money(r.costPerFt),  cls:"big", s:"Inputs!G5" },
@@ -745,7 +754,8 @@ export function cdsHTML() {
         `<li><i><b>${esc(L.name)}</b>${L.note ? " " + esc(L.note) : ""}</i>`
         + `<span>${L.wall}&Prime;</span></li>`).join("")}</ol>
       <div class="figprint"><span>${esc(r.printLine1)}</span>
-        <b>${esc(r.productCode)}</b><span>${esc(r.printLine2)}</span></div>
+        <b data-copy="${esc(r.productCode)}" title="Click to copy"
+          >${esc(r.productCode)}</b><span>${esc(r.printLine2)}</span></div>
       <figcaption>Drawn from this design. Walls are to scale except that a band
         too thin to show is opened up to stay visible &mdash; each carries its true
         wall in the key.</figcaption>
@@ -1369,9 +1379,12 @@ document.getElementById("priceBasis").addEventListener("change", async e => {
   await useBook(e.target.value);
 });
 document.getElementById("resetBtn").addEventListener("click", () => {
+  if (isDirty() && !confirm(CURRENT_DESIGN
+      ? `"${CURRENT_DESIGN.name}" has unsaved changes. Reset and lose them?`
+      : "There are unsaved changes. Reset and lose them?")) return;
   I = { ...DEFAULTS, priceBookId: I.priceBookId };
   S = { ...SPOOL_DEFAULTS };
-  CURRENT_DESIGN = null;
+  CURRENT_DESIGN = null; BASELINE = null;
   recalc({rebuild:true});
 });
 document.getElementById("themeBtn").addEventListener("click", () => {
@@ -1410,11 +1423,33 @@ async function refreshDesignList() {
   const host = document.getElementById("designList");
   if (!host) return;
   try {
-    const rows = await DB.listDesigns();
-    DESIGN_OPTS = rows.map(d => ({ id: d.id, name: d.name, client: d.client }));
+    DESIGN_ROWS = await DB.listDesigns();
+    DESIGN_OPTS = DESIGN_ROWS.map(d => ({ id: d.id, name: d.name, client: d.client }));
     if (PAGES && document.getElementById("cdsPick")) PAGES.refresh();
-    if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">No saved designs yet.</p>`; return; }
-    host.innerHTML = tbl(["Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
+    renderDesignList();
+  } catch (err) { host.innerHTML = `<p class="bad" style="margin:0">${esc(err.message)}</p>`; }
+}
+
+/* Filtered in place from the rows already fetched, so typing never waits on
+   the network and never rebuilds the box under the caret. All words must
+   match, against the name, the client and the duty summary. */
+function renderDesignList() {
+  const host = document.getElementById("designList");
+  if (!host) return;
+  const words = DESIGN_SEARCH.toLowerCase().split(/\s+/).filter(Boolean);
+  const duty = d => d.summary
+    ? `${d.summary.sizeKey ?? ""} ${d.summary.psi ?? ""} ${d.summary.degF ?? ""} ${d.summary.app ?? ""}`
+    : "";
+  const rows = DESIGN_ROWS.filter(d => {
+    const hay = `${d.name} ${d.client || ""} ${duty(d)}`.toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
+  const count = document.getElementById("designCount");
+  if (count) count.textContent = words.length
+    ? `${rows.length} of ${DESIGN_ROWS.length}` : `${DESIGN_ROWS.length} saved`;
+  if (!DESIGN_ROWS.length) { host.innerHTML = `<p class="muted" style="margin:0">No saved designs yet.</p>`; return; }
+  if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">Nothing matches that.</p>`; return; }
+  host.innerHTML = tbl(["Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
       rows.map(d => [
         d.name, d.client || "—",
         {v: d.summary?.costPerFt != null ? money(d.summary.costPerFt) : "—", n:1},
@@ -1423,7 +1458,6 @@ async function refreshDesignList() {
         new Date(d.updated_at).toLocaleDateString(),
         {v:`<button data-open="${esc(d.id)}">Open</button> <button data-del="${esc(d.id)}">Delete</button>`, raw:true}
       ]));
-  } catch (err) { host.innerHTML = `<p class="bad" style="margin:0">${esc(err.message)}</p>`; }
 }
 
 async function openDesign(id) {
@@ -1437,15 +1471,22 @@ async function openDesign(id) {
   // field shows it too — the two are one value, not two.
   if (d.client) I.client = d.client;
   recalc({ rebuild: true });
+  markBaseline(); showDirty();
   document.getElementById("designName").value = d.name;
   document.getElementById("designClient").value = I.client || "";
   setStatus(`Opened "${d.name}".`);
 }
 
-async function doSave() {
-  const name   = document.getElementById("designName").value.trim();
+async function doSave(asCopy) {
+  const nameEl = document.getElementById("designName");
+  let   name   = nameEl.value.trim();
   const client = document.getElementById("designClient").value.trim() || I.client;
   if (!name) { setStatus("Give the design a name first.", true); return; }
+  /* A copy under the same name would be two rows you cannot tell apart, so
+     it gets one - rename it and the suffix goes. */
+  if (asCopy && CURRENT_DESIGN && name === CURRENT_DESIGN.name) {
+    name = `${name} copy`; nameEl.value = name;
+  }
   const summary = {
     costPerFt: R.costPerFt, weightPerFt: R.weightPerFt, burst: R.burstTotal,
     sizeKey: R.sizeKey, psi: R.psi, degF: R.degF, sour: R.sour, app: R.app,
@@ -1453,11 +1494,12 @@ async function doSave() {
   };
   try {
     const saved = await DB.saveDesign({
-      id: CURRENT_DESIGN?.id, name, client, inputs: I, summary,
+      id: asCopy ? null : CURRENT_DESIGN?.id, name, client, inputs: I, summary,
       priceBookId: BOOK ? BOOK.id : null
     });
     CURRENT_DESIGN = { id: saved.id, name: saved.name, client: saved.client };
-    setStatus(`Saved "${saved.name}".`);
+    markBaseline(); showDirty();
+    setStatus(asCopy ? `Saved a copy as "${saved.name}".` : `Saved "${saved.name}".`);
     refreshDesignList();
     // The Quotes page keeps its own copy of the design list; refresh it so a
     // newly saved design can be quoted without reloading the site.
@@ -1465,6 +1507,18 @@ async function doSave() {
     await MDS.reloadDesigns();
     if (PAGES) PAGES.refresh();
   } catch (err) { setStatus(err.message, true); }
+}
+
+/* The inputs as last opened or saved. */
+function markBaseline() { BASELINE = JSON.stringify(I); }
+function isDirty() { return !!BASELINE && JSON.stringify(I) !== BASELINE; }
+function showDirty() {
+  const el = document.getElementById("dirtyFlag");
+  if (!el) return;
+  const d = isDirty();
+  el.textContent = d
+    ? (CURRENT_DESIGN ? `● unsaved changes to "${CURRENT_DESIGN.name}"` : "● unsaved")
+    : "";
 }
 
 function setStatus(msg, bad) {
@@ -1490,9 +1544,36 @@ document.addEventListener("click", async e => {
     catch (err) { setStatus(err.message, true); }
   }
 });
-document.getElementById("saveBtn").addEventListener("click", doSave);
+/* Click anything carrying data-copy to put it on the clipboard. These codes
+   get typed into labels, the ERP and emails, so selecting them by hand is
+   the sort of thing that goes wrong once and matters. */
+document.addEventListener("click", async e => {
+  const el = e.target.closest("[data-copy]");
+  if (!el) return;
+  const text = el.dataset.copy;
+  const was = el.textContent;
+  const say = msg => { el.textContent = was + msg;
+    setTimeout(() => { if (el.textContent !== was) el.textContent = was; }, 1600); };
+  try {
+    await navigator.clipboard.writeText(text);
+    say("  ✓ copied");
+  } catch (err) {
+    /* Blocked clipboard, an unfocused window or an insecure origin: select
+       it so Ctrl+C still works, and say so where the click happened. */
+    const rg = document.createRange(); rg.selectNodeContents(el);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+    say("  — press Ctrl+C");
+  }
+});
+
+document.getElementById("saveBtn").addEventListener("click", () => doSave(false));
+document.getElementById("saveCopyBtn").addEventListener("click", () => doSave(true));
+document.getElementById("designSearch").addEventListener("input", e => {
+  DESIGN_SEARCH = e.target.value;      // filtered from rows already fetched
+  renderDesignList();
+});
 document.getElementById("newBtn").addEventListener("click", () => {
-  CURRENT_DESIGN = null;
+  CURRENT_DESIGN = null; BASELINE = null; showDirty();
   document.getElementById("designName").value = "";
   document.getElementById("designClient").value = I.client;
   setStatus("Started a new design. Saving will create a new record.");

@@ -232,6 +232,10 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 }
 
 /* ---------- Manufacturing Datasheet: a document, not a dashboard ---------- */
+/* Unsaved-changes marker, and anything click-to-copy. */
+#dirtyFlag{font-size:11px;color:var(--warn);font-weight:600}
+[data-copy]{cursor:pointer}
+[data-copy]:hover{outline:1px dashed var(--accent);outline-offset:2px}
 .sheetwrap{display:flex;justify-content:center;margin-top:12px;overflow-x:auto}
 /* The CDS goes to a customer, so on screen it IS the printed page: a letter
    sheet at its real size, not a dark app panel that prints differently. Every
@@ -416,8 +420,15 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
         <input id="designName" type="text" placeholder="Design name" style="flex:1 1 220px">
         <input id="designClient" type="text" placeholder="Client" data-k="client" style="flex:1 1 160px">
         <button class="pri" id="saveBtn">Save</button>
+        <button id="saveCopyBtn" title="Save these inputs as a NEW design, leaving the one you opened alone">Save as copy</button>
         <button id="newBtn">New</button>
+        <span id="dirtyFlag"></span>
         <span id="saveStatus"></span>
+      </div>
+      <div class="savebar" style="margin-top:2px">
+        <input id="designSearch" type="search" placeholder="Search designs &mdash; name, client or duty"
+          style="flex:1 1 260px">
+        <span id="designCount" class="ref"></span>
       </div>
       <div id="designList"></div>
     </div>
@@ -530,6 +541,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261014-1252"></script>
+<script type="module" src="app/ui.js?v=20261014-1612"></script>
 </body>
 </html>
