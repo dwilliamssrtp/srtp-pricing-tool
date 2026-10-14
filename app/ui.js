@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-1141";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1141";
-import * as DB from "./db.js?v=20261014-1141";
-import { initPages } from "./pages.js?v=20261014-1141";
-import * as PARTSUI from "./partsui.js?v=20261014-1141";
-import * as QUOTESUI from "./quotesui.js?v=20261014-1141";
-import * as MDS from "./mds.js?v=20261014-1141";
-import { optimise, designRules } from "./optimise.js?v=20261014-1141";
+} from "./data.js?v=20261014-1220";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1220";
+import * as DB from "./db.js?v=20261014-1220";
+import { initPages } from "./pages.js?v=20261014-1220";
+import * as PARTSUI from "./partsui.js?v=20261014-1220";
+import * as QUOTESUI from "./quotesui.js?v=20261014-1220";
+import * as MDS from "./mds.js?v=20261014-1220";
+import { optimise, designRules } from "./optimise.js?v=20261014-1220";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-1141";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-1220";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -545,21 +545,114 @@ function sheetMDS2(r) {
 }
 
 /* ---------------------------------------------------------------------
-   Construction drawing, generated from the design.
+   Construction artwork.
 
-   A photograph cannot do this job: a low-temp water pipe is a single PP
-   wall while a high-temp one is PPS / Lotader / Nylon HT, and the sheet
-   has to show which one the customer is buying. Drawn as SVG so it also
-   stays sharp on a printed sheet at any size.
+   The render is SRTP's own, carrying both constructions: the multilayer
+   pipe on top and the liner-only build underneath. Which one a design is
+   comes straight out of the engine - it always reports three base walls,
+   and a liner-only pipe reports the SAME material three times, so one
+   distinct base material means single layer.
 
-   The tube is built as a stepped cutaway: each layer is painted from its
-   own left edge to the right margin, over the one inside it, so the
-   layers read inside-out from left to right. Walls are drawn to scale
-   except that a band thinner than MINBAND is opened up to stay legible -
-   the 0.010in bond would otherwise be invisible - so every band carries
-   its true wall in the legend beneath.
+   The callouts and the print on the jacket are drawn over the artwork
+   rather than taken from it, so they say what THIS pipe is made of. The
+   boxes are painted in the artwork's own fill, sampled off the file at
+   rgb(241,244,246) and flat to within two levels, so a redrawn callout
+   is not a patch sitting on top of one - it is the same box.
+
+   Geometry below is measured from the file, not guessed: callout boxes by
+   scanning rows for that fill, the print blocks by finding the two long
+   rules on the jacket.
    --------------------------------------------------------------------- */
-const FIG_INK = { base:["#f4f4f2", "#d4dade", "#c9a46c"], braid:"#b8873f", jacket:"#ebebe9" };
+const ART = {
+  src: "assets/rtp-layers-2up.webp", W: 1774, H: 887, fill: "#f1f4f6",
+  multi: { y: 0, h: 468,
+    callouts: [ { k:"liner", x:61, y:13, w:302 }, { k:"bond", x:421, y:13, w:253 },
+                { k:"backer", x:712, y:13, w:232 }, { k:"braid", x:1007, y:13, w:282 },
+                { k:"jacket", x:1431, y:13, w:290 } ],
+    print: { x:1315, y:243, w:392, h:86 } },
+  single: { y: 508, h: 379,
+    callouts: [ { k:"liner", x:260, y:548, w:310 }, { k:"braid", x:834, y:536, w:307 },
+                { k:"jacket", x:1396, y:524, w:340 } ],
+    print: { x:1339, y:712, w:349, h:80 } }
+};
+/* The artwork's own copy, kept so a redrawn callout reads as the original. */
+const ART_BLURB = {
+  liner:  "Provides a smooth, non-corrosive flow path and primary chemical resistance.",
+  bond:   "Chemically bonds the liner to the backer to ensure layer integrity.",
+  backer: "Provides hoop strength and gives collapse resistance for reinforcement layers.",
+  braid:  "Provides hoop strength and gives collapse resistance.",
+  jacket: "Protects against abrasion, UV, and external damage. Provides essential outer protection."
+};
+
+/* Greedy wrap in image units. ~0.53em per character at this weight. */
+function artWrap(text, widthPx, fontPx) {
+  const max = Math.max(8, Math.floor(widthPx / (fontPx * 0.53)));
+  const out = []; let line = "";
+  for (const word of String(text).split(/\s+/)) {
+    if (!line) { line = word; continue; }
+    if ((line + " " + word).length <= max) line += " " + word; else { out.push(line); line = word; }
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+function pipeFigure(r) {
+  if (!(r.jacketOD > 0)) return { svg:"", legend:[] };
+
+  /* One distinct base material means the liner-only build. */
+  const baseWalls = r.base.filter(L => L.thk > 0);
+  const distinct = [...new Set(baseWalls.map(L => matLabel(L.name)))];
+  const single = distinct.length <= 1;
+  const P = single ? ART.single : ART.multi;
+
+  const braidName = (r.xbraid || "").replace(/ \(.*/, "");
+  const NAME = { liner: matLabel(r.liner), bond: matLabel(r.bond),
+                 backer: matLabel(r.backer), braid: braidName, jacket: matLabel(r.jacket) };
+
+  const HEAD = 27, BODY = 22, PADX = 13, PADY = 10, LEAD = 26;
+  const callouts = P.callouts.map(cz => {
+    const lines = artWrap(ART_BLURB[cz.k], cz.w - PADX * 2, BODY);
+    const h = PADY * 2 + HEAD + 6 + lines.length * LEAD;
+    const tx = cz.x + PADX;
+    return `<rect x="${cz.x}" y="${cz.y}" width="${cz.w}" height="${h}" rx="7"
+              fill="${ART.fill}"/>
+            <text x="${tx}" y="${cz.y + PADY + HEAD - 5}" class="ah">${esc(NAME[cz.k] || "")}</text>`
+         + lines.map((ln, n) =>
+             `<text x="${tx}" y="${cz.y + PADY + HEAD + 6 + LEAD * n + BODY - 5}"
+                class="ab">${esc(ln)}</text>`).join("");
+  }).join("");
+
+  /* The print on the jacket, between the artwork's two rules. */
+  const pr = P.print, pl = [r.printLine1, r.productCode, r.printLine2];
+  const plFont = Math.min(21, (pr.w - 18) / (Math.max(...pl.map(t => t.length)) * 0.63));
+  const print = `<rect x="${pr.x}" y="${pr.y}" width="${pr.w}" height="${pr.h}" fill="#ffffff"/>`
+    + pl.map((t, n) => `<text x="${pr.x + pr.w / 2}" y="${pr.y + pr.h / 2 + (n - 1) * (plFont + 6)
+        + plFont * 0.36}" text-anchor="middle" class="${n === 1 ? "apb" : "ap"}"
+        style="font-size:${plFont.toFixed(1)}px">${esc(t)}</text>`).join("");
+
+  const svg = `<svg class="pipefig" viewBox="0 ${P.y} ${ART.W} ${P.h}" role="img"
+      aria-label="Construction of ${esc(r.productCode)}">
+    <style>
+      .ah{font:700 ${HEAD}px var(--sans,sans-serif);fill:#14365f}
+      .ab{font:400 ${BODY}px var(--sans,sans-serif);fill:#2d3a47}
+      .ap{font:400 20px var(--mono,monospace);fill:#1a1a1a}
+      .apb{font:700 20px var(--mono,monospace);fill:#1a1a1a}
+    </style>
+    <image href="${ART.src}" x="0" y="0" width="${ART.W}" height="${ART.H}"/>
+    ${callouts}${print}
+  </svg>`;
+
+  /* The key carries the walls, which the artwork cannot show. */
+  const legend = [];
+  let n = 0;
+  const push = (name, thk, note) => legend.push({ n: ++n, name, note, wall: f3(thk) });
+  if (single) push(matLabel(r.liner), baseWalls.reduce((t, L) => t + L.thk, 0));
+  else for (const L of baseWalls) push(matLabel(L.name), L.thk);
+  push(braidName, (r.jacketID - (baseWalls.length ? baseWalls[baseWalls.length-1].od : r.linerID)) / 2,
+       "reinforcement");
+  push(matLabel(r.jacket), r.jacketThk);
+  return { svg, legend, single };
+}
 
 /* The CDS can be built for any saved design, not only whatever the Designer
    happens to hold: a customer sheet is usually wanted for something saved
@@ -567,109 +660,6 @@ const FIG_INK = { base:["#f4f4f2", "#d4dade", "#c9a46c"], braid:"#b8873f", jacke
    so the design's own price book does not matter here. */
 let CDS_VIEW = null;
 let DESIGN_OPTS = [];
-
-function pipeFigure(r) {
-  if (!(r.jacketOD > 0)) return { svg:"", legend:[] };
-
-  /* Real layers, inside out, merging neighbours of the SAME material: the
-     engine always reports three base walls, and a water pipe reports
-     PP / PP / PP, which is physically one wall and must draw as one. */
-  const layers = [];
-  const add = (name, id, od, role, note) => {
-    const prev = layers[layers.length - 1];
-    if (prev && prev.name === name && Math.abs(prev.od - id) < 1e-9) { prev.od = od; return; }
-    layers.push({ name, id, od, role, note });
-  };
-  for (const L of r.base) if (L.thk > 0) add(matLabel(L.name), L.id, L.od, "base");
-  const reinfID = layers.length ? layers[layers.length - 1].od : r.linerID;
-  if (r.jacketID > reinfID)
-    add("Reinforcement", reinfID, r.jacketID, "braid", (r.xbraid || "").replace(/ \(.*/, ""));
-  add(matLabel(r.jacket), r.jacketID, r.jacketOD, "jacket");
-  if (!layers.length) return { svg:"", legend:[] };
-
-  /* Sized to the v7 CDS picture: 265 x 133 pt, about half the page width.
-     At that size a name beside every band cannot be read, so the bands
-     carry numbers and the names go in a legend underneath, where they are
-     real selectable text rather than tiny glyphs inside the drawing. */
-  const W = 780, PAD = 16, MINBAND = 7, STEP = 68, maxR = 46;
-  const scale = maxR / (r.jacketOD / 2);
-  let rad = Math.max((r.linerID / 2) * scale, 12);
-  const bore = rad;
-  let baseSeen = 0;
-  const bands = layers.map((L, i) => {
-    const w = Math.max(((L.od - L.id) / 2) * scale, MINBAND);
-    const b = { ...L, n: i + 1, r0: rad, r1: rad + w, x: PAD + i * STEP,
-                fill: L.role === "base"  ? FIG_INK.base[Math.min(baseSeen++, 2)]
-                    : L.role === "braid" ? FIG_INK.braid : FIG_INK.jacket };
-    rad += w; return b;
-  });
-  const cy = rad + 13, H = cy + rad + 23, xR = W - PAD;
-
-  /* Painted outward, each layer covering the one inside it from its own
-     left edge, which is what produces the stepped cut. */
-  const tube = bands.map(b => {
-    const h = b.r1, rx = 7;
-    return `<path d="M ${b.x} ${cy - h} H ${xR} V ${cy + h} H ${b.x}
-              A ${rx} ${h} 0 0 1 ${b.x} ${cy - h} Z" fill="${b.fill}"
-              stroke="#8d8d8a" stroke-width="0.7"/>`
-         + (b.role === "braid"
-             ? `<rect x="${b.x}" y="${cy - b.r1}" width="${xR - b.x}"
-                  height="${b.r1 - b.r0}" fill="url(#weave)"/>
-                <rect x="${b.x}" y="${cy + b.r0}" width="${xR - b.x}"
-                  height="${b.r1 - b.r0}" fill="url(#weave)"/>` : "")
-         + `<ellipse cx="${b.x}" cy="${cy}" rx="${rx}" ry="${h}" fill="${b.fill}"
-              stroke="#8d8d8a" stroke-width="0.7"/>`
-         + (b.role === "braid"
-             ? `<ellipse cx="${b.x}" cy="${cy}" rx="${rx}" ry="${h}" fill="url(#weave)"
-                  stroke="none"/>` : "");
-  }).join("");
-
-  const borehole = `<ellipse cx="${PAD}" cy="${cy}" rx="7" ry="${bore}" fill="#2b3036"/>`;
-
-  /* A number on each exposed face, keyed to the legend. */
-  const marks = bands.map(b => {
-    const x = b.x + 16, y = cy - (b.r0 + b.r1) / 2;
-    return `<circle cx="${x}" cy="${y}" r="7.5" fill="#ffffff" stroke="#d2690f"
-              stroke-width="1.2"/>
-            <text x="${x}" y="${y + 3.4}" text-anchor="middle" class="fn">${b.n}</text>`;
-  }).join("");
-
-  /* The pipe carries its code, as the real print does. The full legend is
-     set beneath the figure where it can actually be read. */
-  const plateW = Math.min(250, xR - (bands[bands.length - 1].x + 40));
-  const plate = plateW < 90 ? "" : `
-    <rect x="${xR - plateW - 12}" y="${cy - 9}" width="${plateW}" height="18" rx="2.5"
-      fill="#ffffff" stroke="#9a9a97" stroke-width="0.7"/>
-    <text x="${xR - plateW / 2 - 12}" y="${cy + 3.5}" text-anchor="middle"
-      class="fpb">${esc(r.productCode)}</text>`;
-
-  const dims = `
-    <text x="${PAD}" y="${H - 9}" class="fs">ID ${f3(r.linerID)}&Prime;</text>
-    <text x="${xR}" y="${H - 9}" text-anchor="end" class="fs">OD ${f3(r.jacketOD)}&Prime;</text>`;
-
-  const svg = `<svg class="pipefig" viewBox="0 0 ${W} ${H}" role="img"
-      aria-label="Construction of ${esc(r.productCode)}">
-    <defs>
-      <pattern id="weave" width="7" height="7" patternUnits="userSpaceOnUse">
-        <path d="M-1 1 l4 -4 M0 7 l7 -7 M4 8 l4 -4"
-          stroke="#7d5720" stroke-width="1.7" opacity="0.5"/>
-        <path d="M-1 6 l4 4 M0 0 l7 7 M4 -1 l4 4"
-          stroke="#e0c08a" stroke-width="1.7" opacity="0.55"/>
-      </pattern>
-    </defs>
-    <style>
-      .fn{font:700 9px var(--sans,sans-serif);fill:#d2690f}
-      .fs{font:400 9px var(--sans,sans-serif);fill:#6a7076}
-      .fpb{font:700 8.5px var(--mono,monospace);fill:#23282d}
-    </style>
-    <rect width="${W}" height="${H}" fill="#ffffff"/>
-    ${tube}${borehole}${plate}${marks}${dims}
-  </svg>`;
-
-  return { svg, legend: bands.map(b => ({
-    n: b.n, name: b.name, note: b.note,
-    wall: f3(Math.abs(b.od - b.id) / 2) })) };
-}
 
 /* The CDS is its own page rather than a strip entry, and it is the sheet
    that goes to a CUSTOMER. So construction leads at full width, and the
