@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-1115";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1115";
-import * as DB from "./db.js?v=20261014-1115";
-import { initPages } from "./pages.js?v=20261014-1115";
-import * as PARTSUI from "./partsui.js?v=20261014-1115";
-import * as QUOTESUI from "./quotesui.js?v=20261014-1115";
-import * as MDS from "./mds.js?v=20261014-1115";
-import { optimise, designRules } from "./optimise.js?v=20261014-1115";
+} from "./data.js?v=20261014-1124";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1124";
+import * as DB from "./db.js?v=20261014-1124";
+import { initPages } from "./pages.js?v=20261014-1124";
+import * as PARTSUI from "./partsui.js?v=20261014-1124";
+import * as QUOTESUI from "./quotesui.js?v=20261014-1124";
+import * as MDS from "./mds.js?v=20261014-1124";
+import { optimise, designRules } from "./optimise.js?v=20261014-1124";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -25,7 +25,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-1115";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-1124";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -561,6 +561,13 @@ function sheetMDS2(r) {
    --------------------------------------------------------------------- */
 const FIG_INK = { base:["#f4f4f2", "#d4dade", "#c9a46c"], braid:"#b8873f", jacket:"#ebebe9" };
 
+/* The CDS can be built for any saved design, not only whatever the Designer
+   happens to hold: a customer sheet is usually wanted for something saved
+   earlier. null means "follow the Designer". Nothing on this page is priced,
+   so the design's own price book does not matter here. */
+let CDS_VIEW = null;
+let DESIGN_OPTS = [];
+
 function pipeFigure(r) {
   if (!(r.jacketOD > 0)) return { svg:"", legend:[] };
 
@@ -670,8 +677,20 @@ function pipeFigure(r) {
    mean nothing outside the office. The fittings lookup stays internal; only
    the insert ID it produces appears here. */
 export function cdsHTML() {
-  const r = R;
+  const r = CDS_VIEW ? CDS_VIEW.r : R;
   if (!r) return `<p class="ref">Open or build a design on the Designer first.</p>`;
+
+  const picker = `<div class="savebar noprint">
+      <select id="cdsPick" style="flex:1 1 280px">
+        <option value="">&mdash; the design open on the Designer &mdash;</option>
+        ${DESIGN_OPTS.map(d => `<option value="${esc(d.id)}"${
+          CDS_VIEW && CDS_VIEW.id === d.id ? " selected" : ""}>${esc(d.name)}${
+          d.client ? " · " + esc(d.client) : ""}</option>`).join("")}
+      </select>
+      <span class="ref">${CDS_VIEW
+        ? "Showing <b>" + esc(CDS_VIEW.name) + "</b>"
+        : "Following the Designer"}</span>
+    </div>`;
 
   const head = tbl(null, [
     [{v:"Application",k:1},{v:r.app},{v:"Pipe Size",k:1},{v:f0(r.mdsSize)+" in"}],
@@ -733,7 +752,8 @@ export function cdsHTML() {
     `<div class="card" style="margin-bottom:16px"><h3>${title}${
       sub?` <small>${sub}</small>`:""}</h3><div class="pad">${body}</div></div>`;
 
-  return card("Construction", fig + cons)
+  return picker
+       + card("Construction", fig + cons)
        + `<div class="two">
             <div>${card("Duty &amp; standard", head)}</div>
             <div>${card("Parameters", par)}</div>
@@ -1386,6 +1406,8 @@ async function refreshDesignList() {
   if (!host) return;
   try {
     const rows = await DB.listDesigns();
+    DESIGN_OPTS = rows.map(d => ({ id: d.id, name: d.name, client: d.client }));
+    if (PAGES && document.getElementById("cdsPick")) PAGES.refresh();
     if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">No saved designs yet.</p>`; return; }
     host.innerHTML = tbl(["Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
       rows.map(d => [
@@ -1629,6 +1651,21 @@ function runOptimise(announce) {
   if (announce) setStatus(res.best ? "Braid configured." : "Nothing passes for this duty.", !res.best);
   return res;
 }
+
+document.addEventListener("change", async e => {
+  if (e.target.id !== "cdsPick") return;
+  try {
+    const id = e.target.value;
+    if (!id) { CDS_VIEW = null; }
+    else {
+      const d = await DB.loadDesign(id);
+      CDS_VIEW = { id, name: d.name,
+        r: solve({ ...DEFAULTS, ...d.inputs, prices: PRICES,
+                   priceBookName: BOOK ? BOOK.name : null }) };
+    }
+    if (PAGES) PAGES.refresh();
+  } catch (err) { setStatus(err.message, true); }
+});
 
 document.addEventListener("change", e => {
   if (e.target.id === "autoCfg") {
