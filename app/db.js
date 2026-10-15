@@ -1,7 +1,7 @@
 /* =====================================================================
    Supabase client, session handling and data access.
    ===================================================================== */
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261015-0915";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261015-1533";
 
 const { createClient } = await import(SUPABASE_JS);
 
@@ -90,7 +90,7 @@ export async function updatePrice(bookId, kind, itemKey, price) {
 export async function listDesigns() {
   const { data, error } = await sb
     .from("designs")
-    .select("id,name,client,notes,summary,created_at,updated_at,created_by")
+    .select("id,name,client,notes,summary,inputs,price_book_id,created_at,updated_at,created_by")
     .order("updated_at", { ascending: false });
   if (error) throw error;
   return data || [];

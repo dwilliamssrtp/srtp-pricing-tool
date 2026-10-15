@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261015-0915";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-0915";
-import * as DB from "./db.js?v=20261015-0915";
-import { initPages } from "./pages.js?v=20261015-0915";
-import * as PARTSUI from "./partsui.js?v=20261015-0915";
-import * as QUOTESUI from "./quotesui.js?v=20261015-0915";
-import * as MDS from "./mds.js?v=20261015-0915";
-import { optimise, designRules } from "./optimise.js?v=20261015-0915";
+} from "./data.js?v=20261015-1533";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1533";
+import * as DB from "./db.js?v=20261015-1533";
+import { initPages } from "./pages.js?v=20261015-1533";
+import * as PARTSUI from "./partsui.js?v=20261015-1533";
+import * as QUOTESUI from "./quotesui.js?v=20261015-1533";
+import * as MDS from "./mds.js?v=20261015-1533";
+import { optimise, designRules } from "./optimise.js?v=20261015-1533";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -26,6 +26,34 @@ let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
    design, instead of leaving you to guess. */
 let BASELINE = null;
 let DESIGN_ROWS = [], DESIGN_SEARCH = "";
+/* Designs ticked for comparison, by id. */
+let COMPARE = new Set();
+/* Re-solving every saved design on each keystroke of the search box would be
+   wasteful, so a health verdict is cached per design version and price book.
+   Saving a design changes updated_at, which retires its entry by itself. */
+const HEALTH = new Map();
+/* Pass/fail for a saved design, judged by the SAME rules the Designer's own
+   checklist uses, against the price book loaded now - so a design saved when
+   it passed shows as failing once a rule or a price moves under it. */
+function healthOf(d) {
+  if (!d.inputs || !BOOK) return { state:"unknown", why:"Not checked yet." };
+  const key = `${d.id}:${d.updated_at}:${BOOK.id}`;
+  if (HEALTH.has(key)) return HEALTH.get(key);
+  let v;
+  try {
+    const r = solve({ ...DEFAULTS, ...d.inputs, prices: PRICES });
+    const bad = designRules(r).filter(x => !x.ok);
+    const hard = bad.filter(x => x.hard).map(x => x.msg);
+    const soft = bad.filter(x => !x.hard).map(x => x.msg);
+    v = hard.length ? { state:"bad",  why:"Fails: " + hard.join("; ") }
+      : soft.length ? { state:"warn", why:"Allowed, but: " + soft.join("; ") }
+      :               { state:"ok",   why:"All design checks pass." };
+  } catch (err) {
+    v = { state:"unknown", why:"Could not be checked: " + err.message };
+  }
+  HEALTH.set(key, v);
+  return v;
+}
 let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
@@ -45,7 +73,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261015-0915";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261015-1533";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -301,6 +329,137 @@ function renderInputs() {
     field("Target margin","margin","num",{step:0.01,min:0,unit:"frac"}),
   ].join("");
 }
+
+/* =====================================================================
+   standard designs - the easiest-to-make configuration for every duty
+   on the standard product table
+   ===================================================================== */
+/* Nominal size is what the table and the customer call it; design size is
+   the pipe we actually build. The mapping was given for 2-5 inch; 6 inch is
+   matched to 6.8 because that is the only pipe whose liner ID is the 5.6 in
+   the table (PIPE["6.8"].Q), but it is an inference, not a given. */
+const STD_SIZES = [
+  { nom:'2"', design:"2.375", tableID:2.0, psis:[300,500,750,1500,2250,3000,3500] },
+  { nom:'3"', design:"3.5",   tableID:3.0, psis:[300,500,750,1500,2250,3000] },
+  { nom:'4"', design:"4.5",   tableID:4.0, psis:[300,500,750,1500,2250] },
+  { nom:'5"', design:"6",     tableID:5.0, psis:[300,500,750,1500,2250] },
+  { nom:'6"', design:"6.8",   tableID:5.6, psis:[300,500,750,1500,2250] }
+];
+const STD_TEMPS = [150, 185, 196, 221];
+let STANDARD_ROWS = null;      // built on demand, then cached for the session
+
+function buildStandard() {
+  const rows = [];
+  for (const sz of STD_SIZES)
+    for (const psi of sz.psis)
+      for (const degF of STD_TEMPS) {
+        const base = { ...DEFAULTS, sizeKey:sz.design, psi, degF, app:"Flowline" };
+        let res = null, err = null;
+        try { res = optimise({ ...base }, PRICES, { objective:"fewest_passes" }); }
+        catch (e) { err = e.message; }
+        const hit = res && (res.best || res.nearest);
+        rows.push({ ...sz, psi, degF, err,
+          passes: hit ? hit.inputs.passes : null,
+          clean: !!(res && res.best),
+          inputs: hit ? { ...base, ...hit.inputs } : null,
+          r: hit ? hit : null,
+          blockers: res && !res.best && res.nearest ? res.nearest.blockers : [],
+          warnings: hit && hit.warnings ? hit.warnings : [] });
+      }
+  STANDARD_ROWS = rows;
+  return rows;
+}
+
+function standardHTML() {
+  /* The whole table is 112 optimiser runs in about 300ms, so it is built on
+     open rather than behind a button. Rebuild is there for after a price
+     change, since the configurations are cached for the session. */
+  if (!STANDARD_ROWS) buildStandard();
+  const rows = [];
+  let lastNom = null;
+  STANDARD_ROWS.forEach((d, i) => {
+    if (d.nom !== lastNom) {
+      lastNom = d.nom;
+      rows.push({ group: `${d.nom} nominal \u2014 ${d.design} in design pipe `
+        + `\u00b7 ${d.psis.length} pressures \u00d7 ${STD_TEMPS.length} temperatures` });
+    }
+    const r = d.r;
+    const status = d.err ? `<span class="bad">error</span>`
+      : !r ? `<span class="bad">nothing configures</span>`
+      : !d.clean ? `<span class="bad" title="${esc(d.blockers.join("; "))}">short</span>`
+      : d.warnings.length ? `<span class="warn" title="${esc(d.warnings.join("; "))}">allowed</span>`
+      : `<span class="ok">ok</span>`;
+    rows.push({ cells: [
+      { v:f0(d.psi)+" psi", n:1 },
+      { v:f0(d.degF)+" \u00b0F", n:1 },
+      r ? String(r.inputs.xbraid).replace(/ \(.*/, "") : "\u2014",
+      { v: r ? f(r.inputs.pitch) : "\u2014", n:1 },
+      { v: r ? String(r.inputs.passes) : "\u2014", n:1 },
+      { v: r ? `${f0(r.inputs.longsQty)} \u00d7 ` + String(r.inputs.longs).replace(/ \(.*/, "") : "\u2014" },
+      { v: r ? money(r.costPerFt) : "\u2014", n:1 },
+      { v: r ? f0(r.burst)+" psi" : "\u2014", n:1 },
+      { v: status, raw:true },
+      { v: r ? `<button data-std="${i}">Open</button>` : "", raw:true }
+    ]});
+  });
+  const clean = STANDARD_ROWS.filter(d => d.clean).length;
+  return `<div class="card"><div class="pad">
+    <div class="savebar" style="margin-bottom:8px">
+      <span class="ref">${STANDARD_ROWS.length} duties &middot; ${clean} configure cleanly
+        &middot; ${STANDARD_ROWS.length-clean} need review</span>
+      <button id="stdBuild">Rebuild</button>
+      <button id="stdCSV">Export CSV</button>
+    </div>
+    ${tbl([{t:"MAOP",n:1},{t:"Temp",n:1},"X-braid",{t:"Pitch",n:1},{t:"Passes",n:1},
+           "Longs",{t:"$/ft",n:1},{t:"Burst",n:1},"Status",""], rows)}
+    <p class="ref" style="margin:10px 0 0">6&quot; nominal is matched to the 6.8 design pipe,
+      whose liner ID is the 5.6 in on the table. The other four mappings were given.</p>
+  </div></div>`;
+}
+
+function exportStandardCSV() {
+  if (!STANDARD_ROWS) return;
+  const out = STANDARD_ROWS.map(d => {
+    const r = d.r;
+    return [d.nom, d.design, d.tableID, d.psi, d.degF,
+      r ? String(r.inputs.xbraid).replace(/ \(.*/, "") : "",
+      r ? r.inputs.pitch : "", r ? r.inputs.passes : "",
+      r ? String(r.inputs.longs).replace(/ \(.*/, "") : "", r ? r.inputs.longsQty : "",
+      r ? r.costPerFt.toFixed(4) : "", r ? Math.round(r.burst) : "",
+      d.err ? "error" : !r ? "nothing configures" : !d.clean ? "short" : d.warnings.length ? "allowed" : "ok",
+      d.err || (!d.clean ? d.blockers.join("; ") : d.warnings.join("; "))];
+  });
+  downloadCSV(`srtp-standard-designs-${new Date().toISOString().slice(0,10)}.csv`,
+    toCSV(["Nominal","Design pipe","Table ID in","MAOP psi","Temp F","X-braid","Pitch in",
+           "Passes","Longs","Longs qty","Cost $/ft","Burst psi","Status","Detail"], out));
+}
+
+document.addEventListener("click", e => {
+  if (e.target.closest("#stdBuild")) {
+    const host = document.getElementById("standardPage");
+    if (host) host.innerHTML = `<div class="card"><div class="pad">Building\u2026</div></div>`;
+    setTimeout(() => { buildStandard(); if (host) host.innerHTML = standardHTML(); }, 20);
+    return;
+  }
+  if (e.target.closest("#stdCSV")) { exportStandardCSV(); return; }
+  const open = e.target.closest("[data-std]");
+  if (open && STANDARD_ROWS) {
+    const d = STANDARD_ROWS[+open.dataset.std];
+    if (!d || !d.inputs) return;
+    /* Loaded as a NEW design, not an edit of a saved one, so saving it cannot
+       overwrite whatever was open before. */
+    I = { ...DEFAULTS, ...d.inputs };
+    CURRENT_DESIGN = null; BASELINE = null;
+    document.getElementById("designName").value =
+      `${d.nom} ${d.psi}PSI ${d.degF}F standard`;
+    document.getElementById("designNote").value =
+      `From the standard table \u2014 easiest to make (${d.passes} pass).`;
+    recalc({ rebuild: true });
+    markBaseline(); showDirty();
+    if (PAGES) PAGES.setPage("designer");
+    setStatus("Loaded the standard design. Save it to keep it.");
+  }
+});
 
 /* =====================================================================
    display section
@@ -1472,8 +1631,13 @@ function renderDesignList() {
     ? `${rows.length} of ${DESIGN_ROWS.length}` : `${DESIGN_ROWS.length} saved`;
   if (!DESIGN_ROWS.length) { host.innerHTML = `<p class="muted" style="margin:0">No saved designs yet.</p>`; return; }
   if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">Nothing matches that.</p>`; return; }
-  host.innerHTML = tbl(["Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
-      rows.map(d => [
+  host.innerHTML = tbl(["","",  "Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
+      rows.map(d => {
+        const h = healthOf(d);
+        return [
+        {v:`<input type="checkbox" class="cmpbox" data-cmp="${esc(d.id)}"`
+           + `${COMPARE.has(d.id) ? " checked" : ""} title="Compare this design">`, raw:true},
+        {v:`<span class="hdot h-${h.state}" title="${esc(h.why)}"></span>`, raw:true},
         {v: esc(d.name) + (d.notes
             ? `<br><span class="ref" style="font-weight:400">${esc(d.notes)}</span>` : ""),
           raw:true},
@@ -1483,7 +1647,112 @@ function renderDesignList() {
         {v: d.summary?.burst != null ? f0(d.summary.burst) + " psi" : "—", n:1},
         new Date(d.updated_at).toLocaleDateString(),
         {v:`<button data-open="${esc(d.id)}">Open</button> <button data-del="${esc(d.id)}">Delete</button>`, raw:true}
-      ]));
+      ];}));
+  renderCompare();
+}
+
+/* Side-by-side comparison of the ticked designs. Each is re-solved against
+   the price book loaded now rather than read from its stored summary, so the
+   columns are comparable even when the designs were saved months apart. */
+/* ---------------------------------------------------------------- CSV */
+/* Excel treats a leading =, +, - or @ as a formula, so a value starting with
+   one is prefixed with an apostrophe. Without it a design named "=SUM(A1)"
+   would execute on open - and a part number beginning with - would vanish
+   into a formula error. */
+function csvCell(v) {
+  let t = v == null ? "" : String(v);
+  if (/^[=+\-@]/.test(t)) t = "'" + t;
+  return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+function toCSV(head, rows) {
+  return [head, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
+}
+function downloadCSV(name, text) {
+  /* The BOM is what makes Excel read it as UTF-8; without it the degree sign
+     in "221 °F" arrives mangled. */
+  const blob = new Blob(["﻿" + text], { type:"text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function exportDesignsCSV() {
+  const words = DESIGN_SEARCH.toLowerCase().split(/\s+/).filter(Boolean);
+  const duty = d => d.summary
+    ? `${d.summary.sizeKey ?? ""} ${d.summary.psi ?? ""} ${d.summary.degF ?? ""} ${d.summary.app ?? ""}` : "";
+  /* Whatever the search box is showing is what gets exported, so a filtered
+     list and its CSV cannot disagree. */
+  const rows = DESIGN_ROWS.filter(d =>
+    words.every(w => `${d.name} ${d.client || ""} ${duty(d)} ${d.notes || ""}`.toLowerCase().includes(w)));
+  const out = rows.map(d => {
+    let r = null;
+    try { r = d.inputs ? solve({ ...DEFAULTS, ...d.inputs, prices: PRICES }) : null; } catch (e) {}
+    const h = healthOf(d);
+    return [d.name, d.client || "", d.notes || "",
+      r ? r.sizeKey : d.summary?.sizeKey ?? "", r ? r.psi : d.summary?.psi ?? "",
+      r ? r.degF : d.summary?.degF ?? "", r ? r.app : d.summary?.app ?? "",
+      r ? String(r.xbraid).replace(/ \(.*/, "") : "", r ? r.pitch : "", r ? r.passes : "",
+      r ? String(r.longsName).replace(/ \(.*/, "") : "", r ? r.longsQty : "",
+      r ? r.costPerFt.toFixed(4) : "", r ? r.sellPerFt.toFixed(4) : "",
+      r ? r.weightPerFt.toFixed(4) : "", r ? Math.round(r.burstTotal) : "",
+      r ? Math.round(r.targetBurstR) : "", r ? (r.strainRatio*100).toFixed(1) : "",
+      r ? (r.fiberRatio*100).toFixed(1) : "",
+      h.state, h.state === "ok" ? "" : h.why,
+      new Date(d.updated_at).toISOString().slice(0,10)];
+  });
+  downloadCSV(`srtp-designs-${new Date().toISOString().slice(0,10)}.csv`,
+    toCSV(["Design","Client","Note","Size","MAOP psi","Temp F","Application",
+           "X-braid","Pitch in","Passes","Longs","Longs qty","Cost $/ft","Sell $/ft",
+           "Weight lb/ft","Burst psi","Design burst psi","Longs strain %",
+           "Coupling retention %","Health","Health detail","Updated"], out));
+  setStatus(`Exported ${out.length} design${out.length===1?"":"s"} to CSV.`);
+}
+
+function renderCompare() {
+  const host = document.getElementById("designCompare");
+  if (!host) return;
+  const picked = DESIGN_ROWS.filter(d => COMPARE.has(d.id));
+  if (picked.length < 2) {
+    host.innerHTML = picked.length === 1
+      ? `<p class="ref" style="margin:8px 0 0">Tick a second design to compare.</p>` : "";
+    return;
+  }
+  const cols = [];
+  for (const d of picked) {
+    try { cols.push({ d, r: solve({ ...DEFAULTS, ...d.inputs, prices: PRICES }), h: healthOf(d) }); }
+    catch (err) { cols.push({ d, r:null, h:healthOf(d) }); }
+  }
+  const line = (label, pick, cls) => ({ cells: [{ v:label, k:1 }].concat(
+    cols.map(c => c.r ? pick(c.r, c) : { v:"—" })), cls });
+  /* Mark the cheapest and the strongest, which is the whole point of putting
+     them side by side. Ties are not marked, since there is no winner. */
+  const costs = cols.filter(c=>c.r).map(c => c.r.costPerFt);
+  const bursts = cols.filter(c=>c.r).map(c => c.r.burstTotal);
+  const minCost = Math.min(...costs), maxBurst = Math.max(...bursts);
+  const only = (arr, v) => arr.filter(x => x === v).length === 1;
+  const win = txt => `<b class="cmpwin">${txt}</b>`;
+  host.innerHTML = tbl(["", ...cols.map(c => esc(c.d.name))], [
+    line("Health", (r,c) => ({ v:`<span class="hdot h-${c.h.state}" title="${esc(c.h.why)}"></span>`
+      + `<span class="ref"> ${c.h.state === "ok" ? "passes" : c.h.state === "warn" ? "allowed" : "fails"}</span>`, raw:true })),
+    line("Size", r => r.sizeKey),
+    line("MAOP", r => f0(r.psi) + " psi"),
+    line("Temperature", r => f0(r.degF) + " °F"),
+    line("X-braid", r => String(r.xbraid).replace(/ \(.*/, "")),
+    line("Pitch", r => f(r.pitch) + " in"),
+    line("Passes", r => String(r.passes)),
+    line("Longs", r => `${f0(r.longsQty)} × ` + String(r.longsName).replace(/ \(.*/, "")),
+    line("Cost", r => ({ v: (only(costs, r.costPerFt) && r.costPerFt === minCost)
+      ? win(money(r.costPerFt) + "/ft") : money(r.costPerFt) + "/ft", raw:true })),
+    line("Sell", r => money(r.sellPerFt) + "/ft"),
+    line("Weight", r => f3(r.weightPerFt) + " lb/ft"),
+    line("Burst", r => ({ v: (only(bursts, r.burstTotal) && r.burstTotal === maxBurst)
+      ? win(f0(r.burstTotal) + " psi") : f0(r.burstTotal) + " psi", raw:true })),
+    line("Design burst target", r => f0(r.targetBurstR) + " psi"),
+    line("Longs strain", r => pct(r.strainRatio)),
+    line("Coupling retention", r => pct(r.fiberRatio)),
+    line("Reel capacity", r => f0(r.lenFinished) + " ft")
+  ]);
 }
 
 async function openDesign(id) {
@@ -1611,6 +1880,17 @@ document.getElementById("designSearch").addEventListener("input", e => {
   renderDesignList();
 });
 document.getElementById("designNote").addEventListener("input", showDirty);
+document.getElementById("exportDesignsBtn").addEventListener("click", exportDesignsCSV);
+document.addEventListener("change", e => {
+  const box = e.target.closest("[data-cmp]");
+  if (!box) return;
+  if (box.checked) COMPARE.add(box.dataset.cmp); else COMPARE.delete(box.dataset.cmp);
+  renderCompare();
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("#cmpClear")) return;
+  COMPARE.clear(); renderDesignList();
+});
 document.getElementById("newBtn").addEventListener("click", () => {
   CURRENT_DESIGN = null; BASELINE = null; showDirty();
   document.getElementById("designName").value = "";
@@ -1674,7 +1954,7 @@ async function enterApp(profile) {
   PAGES = initPages({
     pricingHTML: sheetPricing, usersHTML: sheetUsers,
     quotesHTML:  QUOTESUI.quotesHTML, archiveHTML: QUOTESUI.archiveHTML,
-    mdsHTML:     MDS.mdsHTML, cdsHTML
+    mdsHTML:     MDS.mdsHTML, cdsHTML, standardHTML
   });
   PAGES.showUsers(profile.role === "admin");
   PAGES.restore();
