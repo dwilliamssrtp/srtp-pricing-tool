@@ -313,9 +313,10 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   .sheetwrap{margin:0;display:block}
   .mdsdoc{width:auto;min-height:auto;border:0;border-radius:0;box-shadow:none;
     padding:0.4in 0.45in;page-break-inside:avoid}
-  /* Everything that is not the datasheet gets out of the way, so one sheet
-     of paper carries exactly one MDS. */
-  #page-designer,#page-quotes,#page-archive,#page-pricing,#page-users{display:none!important}
+  /* The inactive pages already carry [hidden], so one sheet of paper gets
+     exactly one page's worth of content on its own. Do NOT name the pages
+     here: that hid #page-quotes even when Quotes was the page being
+     printed, so the sales quote printed as a blank sheet. */
 
   /* The CDS is sent to customers, so it prints as a document rather than as
      a screenshot of a dark UI: white cards, black text, and the construction
@@ -324,6 +325,20 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
      page chrome around it. Side by side the Parameters rows wrap and the
      sheet gets TALLER, so Duty and Parameters stay stacked - measured. */
   .cdsdoc{width:auto;min-height:auto;border:0;border-radius:0;box-shadow:none}
+
+  /* The sales quote goes to a customer too, so it prints as a document and
+     not as a photograph of the dark UI. The CDS gets this from .cdsdoc on
+     screen because the screen IS the sheet there; the quote keeps its dark
+     app look on screen, so the conversion happens here instead. Browsers
+     drop background colours by default but always print text colour, which
+     is what made this matter: grey #a3b1be body copy on white paper. */
+  #page-quotes,#page-quotes .panel,#page-quotes .card{background:#fff!important;
+    border-color:#bbb!important;box-shadow:none!important}
+  #page-quotes *{color:#111!important}
+  #page-quotes th{background:#eee!important;color:#333!important}
+  #page-quotes td,#page-quotes th{border-color:#ccc!important}
+  #page-quotes .ref{color:#555!important}
+  #page-quotes table{break-inside:avoid}
 }
 
 /* ---------- sign-in gate ---------- */
@@ -541,6 +556,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261014-2217"></script>
+<script type="module" src="app/ui.js?v=20261014-2228"></script>
 </body>
 </html>
