@@ -12,7 +12,7 @@
    ===================================================================== */
 
 export function initPages(api) {
-  const PAGES = ["designer", "standard", "mds", "cds", "quotes", "archive", "pricing", "users"];
+  const PAGES = ["designer", "mds", "cds", "quotes", "archive", "pricing", "users"];
   let page = "designer";
 
   function render() {
@@ -31,7 +31,6 @@ export function initPages(api) {
       if (el) el.hidden = !onDesigner;
     }
 
-    if (page === "standard") document.getElementById("standardPage").innerHTML = api.standardHTML();
     if (page === "pricing") document.getElementById("pricingPage").innerHTML = api.pricingHTML();
     if (page === "users")   document.getElementById("usersPage").innerHTML   = api.usersHTML();
     if (page === "quotes")  document.getElementById("quotesPage").innerHTML  = api.quotesHTML();

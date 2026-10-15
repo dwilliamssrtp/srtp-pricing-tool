@@ -226,6 +226,14 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 .shr i{display:block;height:100%;background:var(--accent)}
 .shrcell b{font-weight:600;font-variant-numeric:tabular-nums}
 
+/* The two sheets inside the Designs card. A quieter strip than the page
+   nav, since it switches a panel rather than the whole page. */
+.subtabs{display:flex;gap:4px;margin:10px 0 0;border-bottom:1px solid var(--line)}
+.subtabs button{background:none;border:0;border-bottom:2px solid transparent;
+  border-radius:0;padding:6px 12px;color:var(--ink2);font-weight:600}
+.subtabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.subtabs button:hover{color:var(--ink)}
+
 /* Health dot on a saved design: green passes, amber allowed-with-warnings,
    red breaks a hard rule, grey not checked. The reason is in the title. */
 .hdot{display:inline-block;width:9px;height:9px;border-radius:50%;
@@ -410,7 +418,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
     <div class="brand"><b>SRTP Pricing</b></div>
     <nav class="pagenav" id="pagenav">
       <button data-page="designer" aria-selected="true">Designer</button>
-      <button data-page="standard">Standard designs</button>
       <button data-page="mds">MDS</button>
       <button data-page="cds">CDS</button>
       <button data-page="quotes">Quotes</button>
@@ -449,7 +456,7 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   <h2 class="sec">1 &nbsp;Input section</h2>
 
   <div class="card" style="margin-bottom:16px">
-    <h3>Saved designs <small>Supabase &middot; public.designs</small></h3>
+    <h3>Designs <small>Supabase &middot; public.designs</small></h3>
     <div class="pad">
       <div class="savebar">
         <input id="designName" type="text" placeholder="Design name" style="flex:1 1 220px">
@@ -466,15 +473,22 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
           title="Saved with the design. Shows in the list below."
           style="flex:1 1 320px">
       </div>
-      <div class="savebar" style="margin-top:2px">
-        <input id="designSearch" type="search" placeholder="Search designs &mdash; name, client, duty or note"
-          style="flex:1 1 260px">
-        <span id="designCount" class="ref"></span>
-        <button id="exportDesignsBtn" title="Download what the list is showing as a CSV for Excel">Export CSV</button>
-        <button id="cmpClear" title="Clear the comparison ticks">Clear compare</button>
+      <div class="subtabs" id="designTabs" role="tablist">
+        <button data-dtab="saved" aria-selected="true">Saved designs</button>
+        <button data-dtab="standard" aria-selected="false">Standard designs</button>
       </div>
-      <div id="designList"></div>
-      <div id="designCompare"></div>
+      <div id="savedPane">
+        <div class="savebar" style="margin-top:2px">
+          <input id="designSearch" type="search" placeholder="Search designs &mdash; name, client, duty or note"
+            style="flex:1 1 260px">
+          <span id="designCount" class="ref"></span>
+          <button id="exportDesignsBtn" title="Download what the list is showing as a CSV for Excel">Export CSV</button>
+          <button id="cmpClear" title="Clear the comparison ticks">Clear compare</button>
+        </div>
+        <div id="designList"></div>
+        <div id="designCompare"></div>
+      </div>
+      <div id="standardPane" hidden></div>
     </div>
   </div>
 
@@ -553,11 +567,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   </div><!-- /#designerBody -->
 </section>
 
-<section class="page" id="page-standard" hidden>
-  <h2 class="sec">Standard designs &mdash; easiest to make, for every duty on the product table</h2>
-  <div id="standardPage"></div>
-</section>
-
 <section class="page" id="page-cds" hidden>
   <h2 class="sec">Commercial Datasheet</h2>
   <div id="cdsPage"></div>
@@ -590,6 +599,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261015-1533"></script>
+<script type="module" src="app/ui.js?v=20261015-1538"></script>
 </body>
 </html>

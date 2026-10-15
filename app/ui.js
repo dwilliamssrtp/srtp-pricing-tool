@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261015-1533";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1533";
-import * as DB from "./db.js?v=20261015-1533";
-import { initPages } from "./pages.js?v=20261015-1533";
-import * as PARTSUI from "./partsui.js?v=20261015-1533";
-import * as QUOTESUI from "./quotesui.js?v=20261015-1533";
-import * as MDS from "./mds.js?v=20261015-1533";
-import { optimise, designRules } from "./optimise.js?v=20261015-1533";
+} from "./data.js?v=20261015-1538";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1538";
+import * as DB from "./db.js?v=20261015-1538";
+import { initPages } from "./pages.js?v=20261015-1538";
+import * as PARTSUI from "./partsui.js?v=20261015-1538";
+import * as QUOTESUI from "./quotesui.js?v=20261015-1538";
+import * as MDS from "./mds.js?v=20261015-1538";
+import { optimise, designRules } from "./optimise.js?v=20261015-1538";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -26,6 +26,9 @@ let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
    design, instead of leaving you to guess. */
 let BASELINE = null;
 let DESIGN_ROWS = [], DESIGN_SEARCH = "";
+/* Which sheet the Designs card is showing: the saved list or the standard
+   table. It is a panel swap inside the Designer, not a page of its own. */
+let DESIGN_TAB = "saved";
 /* Designs ticked for comparison, by id. */
 let COMPARE = new Set();
 /* Re-solving every saved design on each keystroke of the search box would be
@@ -73,7 +76,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261015-1533";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261015-1538";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -403,8 +406,10 @@ function standardHTML() {
     ]});
   });
   const clean = STANDARD_ROWS.filter(d => d.clean).length;
-  return `<div class="card"><div class="pad">
-    <div class="savebar" style="margin-bottom:8px">
+  /* No card wrapper: this renders INSIDE the Designs card, next to the
+     saved list, so another card would nest a panel in a panel. */
+  return `
+    <div class="savebar" style="margin:10px 0 8px">
       <span class="ref">${STANDARD_ROWS.length} duties &middot; ${clean} configure cleanly
         &middot; ${STANDARD_ROWS.length-clean} need review</span>
       <button id="stdBuild">Rebuild</button>
@@ -413,9 +418,28 @@ function standardHTML() {
     ${tbl([{t:"MAOP",n:1},{t:"Temp",n:1},"X-braid",{t:"Pitch",n:1},{t:"Passes",n:1},
            "Longs",{t:"$/ft",n:1},{t:"Burst",n:1},"Status",""], rows)}
     <p class="ref" style="margin:10px 0 0">6&quot; nominal is matched to the 6.8 design pipe,
-      whose liner ID is the 5.6 in on the table. The other four mappings were given.</p>
-  </div></div>`;
+      whose liner ID is the 5.6 in on the table. The other four mappings were given.</p>`;
 }
+
+function renderDesignTab() {
+  const saved = document.getElementById("savedPane");
+  const std   = document.getElementById("standardPane");
+  if (!saved || !std) return;
+  saved.hidden = DESIGN_TAB !== "saved";
+  std.hidden   = DESIGN_TAB !== "standard";
+  for (const t of document.querySelectorAll("#designTabs button"))
+    t.setAttribute("aria-selected", String(t.dataset.dtab === DESIGN_TAB));
+  /* Built on first view, then cached - Rebuild is how it is refreshed. */
+  if (DESIGN_TAB === "standard") std.innerHTML = standardHTML();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("#designTabs button[data-dtab]");
+  if (!t) return;
+  DESIGN_TAB = t.dataset.dtab;
+  try { localStorage.setItem(LS + "-designtab", DESIGN_TAB); } catch (err) {}
+  renderDesignTab();
+});
 
 function exportStandardCSV() {
   if (!STANDARD_ROWS) return;
@@ -436,9 +460,9 @@ function exportStandardCSV() {
 
 document.addEventListener("click", e => {
   if (e.target.closest("#stdBuild")) {
-    const host = document.getElementById("standardPage");
-    if (host) host.innerHTML = `<div class="card"><div class="pad">Building\u2026</div></div>`;
-    setTimeout(() => { buildStandard(); if (host) host.innerHTML = standardHTML(); }, 20);
+    const host = document.getElementById("standardPane");
+    if (host) host.innerHTML = `<p class="ref" style="margin:10px 0">Rebuilding…</p>`;
+    setTimeout(() => { STANDARD_ROWS = null; if (host) host.innerHTML = standardHTML(); }, 20);
     return;
   }
   if (e.target.closest("#stdCSV")) { exportStandardCSV(); return; }
@@ -1954,13 +1978,18 @@ async function enterApp(profile) {
   PAGES = initPages({
     pricingHTML: sheetPricing, usersHTML: sheetUsers,
     quotesHTML:  QUOTESUI.quotesHTML, archiveHTML: QUOTESUI.archiveHTML,
-    mdsHTML:     MDS.mdsHTML, cdsHTML, standardHTML
+    mdsHTML:     MDS.mdsHTML, cdsHTML
   });
   PAGES.showUsers(profile.role === "admin");
   PAGES.restore();
 
+  try {
+    const t = localStorage.getItem(LS + "-designtab");
+    if (t === "saved" || t === "standard") DESIGN_TAB = t;
+  } catch (e) {}
   recalc({ rebuild: true });
   refreshDesignList();
+  renderDesignTab();
 }
 
 async function boot() {
