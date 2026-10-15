@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261015-1621";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1621";
-import * as DB from "./db.js?v=20261015-1621";
-import { initPages } from "./pages.js?v=20261015-1621";
-import * as PARTSUI from "./partsui.js?v=20261015-1621";
-import * as QUOTESUI from "./quotesui.js?v=20261015-1621";
-import * as MDS from "./mds.js?v=20261015-1621";
-import { optimise, designRules } from "./optimise.js?v=20261015-1621";
+} from "./data.js?v=20261015-1626";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1626";
+import * as DB from "./db.js?v=20261015-1626";
+import { initPages } from "./pages.js?v=20261015-1626";
+import * as PARTSUI from "./partsui.js?v=20261015-1626";
+import * as QUOTESUI from "./quotesui.js?v=20261015-1626";
+import * as MDS from "./mds.js?v=20261015-1626";
+import { optimise, designRules } from "./optimise.js?v=20261015-1626";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -76,7 +76,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261015-1621";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261015-1626";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -346,7 +346,6 @@ function renderInputs() {
    96 = 8 ft, 144 = 12 ft, 174 = 14.5 ft. */
 const REEL_8    = { label:"8 ft",             sp:96,  hub:68,  t:56 };
 const REEL_12   = { label:"12 ft",            sp:144, hub:108, t:80 };
-const REEL_12D  = { label:"12 ft domestic",   sp:144, hub:108, t:92 };
 /* HD148, not 120: at 120 the hub/OD ratio is 19.3D on the 6.23in pipe and
    17.6D on the 6.8in, both under the 20D bend minimum, so no 14.5 ft reel
    could be wound. 148 is also what the saved 6in designs already run. */
@@ -360,10 +359,13 @@ const STD_SIZES = [
     reels:[REEL_12] },
   { nom:'4"', design:"4.5",   tableID:4.0, psis:[300,500,750,1500,2250],
     reels:[REEL_12] },
+  /* 5in and 6in ship on the 14.5 ft reels only. The 12 ft was dropped
+     because its HD108 hub is 17.3D against the 6.23in pipe and 15.9D
+     against the 6.8in, both under the 20D bend minimum. */
   { nom:'5"', design:"6",     tableID:5.0, psis:[300,500,750,1500,2250],
-    reels:[REEL_145, REEL_12D, REEL_145D] },
+    reels:[REEL_145, REEL_145D] },
   { nom:'6"', design:"6.8",   tableID:5.6, psis:[300,500,750,1500,2250],
-    reels:[REEL_145, REEL_12D, REEL_145D] }
+    reels:[REEL_145, REEL_145D] }
 ];
 const STD_TEMPS = [150, 185, 196, 221];
 let STANDARD_ROWS = null;      // built on demand, then cached for the session
@@ -464,8 +466,8 @@ function standardHTML() {
       whose liner ID is the 5.6 in on the table. The other four mappings were given.
       Reels: 2&quot; on 8 ft (SP96&middot;HD68&middot;T56) with a 12 ft
       (SP144&middot;HD108&middot;T80) option; 3&quot; and 4&quot; on 12 ft;
-      5&quot; and 6&quot; on 14.5 ft foreign (SP174&middot;HD148&middot;T80) or
-      domestic T92 at 12 and 14.5 ft. A reel reading <b>no</b> is under the 20D
+      5&quot; and 6&quot; on 14.5 ft only &mdash; foreign (SP174&middot;HD148&middot;T80)
+      or domestic (SP174&middot;HD148&middot;T92). A reel reading <b>no</b> is under the 20D
       bend minimum for that pipe.</p>`;
 }
 
