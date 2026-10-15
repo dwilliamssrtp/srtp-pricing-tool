@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-1612";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-1612";
-import * as DB from "./db.js?v=20261014-1612";
-import { initPages } from "./pages.js?v=20261014-1612";
-import * as PARTSUI from "./partsui.js?v=20261014-1612";
-import * as QUOTESUI from "./quotesui.js?v=20261014-1612";
-import * as MDS from "./mds.js?v=20261014-1612";
-import { optimise, designRules } from "./optimise.js?v=20261014-1612";
+} from "./data.js?v=20261014-2217";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-2217";
+import * as DB from "./db.js?v=20261014-2217";
+import { initPages } from "./pages.js?v=20261014-2217";
+import * as PARTSUI from "./partsui.js?v=20261014-2217";
+import * as QUOTESUI from "./quotesui.js?v=20261014-2217";
+import * as MDS from "./mds.js?v=20261014-2217";
+import { optimise, designRules } from "./optimise.js?v=20261014-2217";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -30,7 +30,7 @@ let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-1612";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-2217";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -1691,6 +1691,8 @@ boot();
    ===================================================================== */
 const DUTY_KEYS = ["sizeKey", "psi", "degF", "sour", "service", "years", "app"];
 
+const pl = n => `${n} pass${n > 1 ? "es" : ""}`;
+
 function runOptimise(announce) {
   const res = optimise({ ...I }, PRICES, { objective: AUTO_MODE });
   if (res.best) {
@@ -1702,7 +1704,6 @@ function runOptimise(announce) {
       longsQty:res.best.inputs.longsQty
     });
     const w = res.best.warnings.length ? ` — ${res.best.warnings.join("; ")}` : "";
-    const pl = n => `${n} pass${n > 1 ? "es" : ""}`;
     /* Say so when two passes was asked for and nothing ran in two. */
     const twoMissed = AUTO_MODE === "two_pass" && res.best.inputs.passes !== 2;
     const lead = AUTO_MODE === "fewest_passes"
@@ -1733,10 +1734,22 @@ function runOptimise(announce) {
     }
     OPT_NOTE = `${lead}, ${f0(res.best.burst)} psi burst${w}.${diff}`;
   } else if (res.nearest) {
-    OPT_NOTE = `No configuration passes. Closest is ${res.nearest.inputs.xbraid}, `
-             + `${res.nearest.inputs.longsQty} longs — ${res.nearest.blockers.join("; ")}.`;
+    const n = res.nearest;
+    Object.assign(I, {
+      xbraid:  n.inputs.xbraid,
+      pitch:   n.inputs.pitch,
+      passes:  n.inputs.passes,
+      longs:   n.inputs.longs,
+      longsQty:n.inputs.longsQty
+    });
+    OPT_NOTE = `Nothing passes cleanly — closest shown: `
+             + `${n.inputs.xbraid.replace(/ \(.*/, "")}, ${pl(n.inputs.passes)}, `
+             + `pitch ${n.inputs.pitch}", ${n.inputs.longsQty} longs, `
+             + `${money(n.costPerFt)}/ft, ${f0(n.burst)} psi burst. `
+             + `Still short on: ${n.blockers.join("; ")}.`;
   } else {
-    OPT_NOTE = "No configuration found for this duty.";
+    OPT_NOTE = "No configuration found for this duty — check the size, "
+             + "pressure and temperature are a combination you make.";
   }
   if (announce) setStatus(res.best ? "Braid configured." : "Nothing passes for this duty.", !res.best);
   return res;

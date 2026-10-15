@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261014-1612";
-import { solve, requiredYarnType } from "./engine.js?v=20261014-1612";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261014-2217";
+import { solve, requiredYarnType } from "./engine.js?v=20261014-2217";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -81,21 +81,32 @@ function minLongs(base, longsName, prices) {
   const first = probe(4);
   if (!first.longsStr) return null;                       // no such longs
   /* Longs go on in four equal quadrants (Inputs!A114), so the count is a
-     multiple of four. The circumference fit is rounded UP to the next
-     multiple rather than down, which is exactly what v7 does: it fits 38
-     and ships 40. Going further than that is not a rounding artefact,
-     it is overcrowding, so the search stops there. */
-  const cap = Math.max(4, Math.ceil((first.maxLongs || 0) / 4) * 4);
-  for (let q = 4; q <= cap; q += 4) {
-    const r = probe(q);
-    if (r.strainRatio < 0.35 && r.fiberRatio < 0.30)
-      return { qty: q, solved: r, feasible: true };
+     multiple of four. Both hard limits fall as the count rises - strain is
+     force / (qty x strength) and retention is load / (qty x width x stem) -
+     so the smallest count that satisfies them is the one to take.
+
+     The search used to stop at the circumference fit, which made the
+     optimiser report "nothing passes" for duties that work perfectly well
+     with more longs on. The fit is a SOFT rule precisely because exceeding
+     it is normal: v7's own shipped design runs 40 where 38 fit. So the
+     search runs the whole ladder and lets checkDesign raise the warning. */
+  const fit = Math.max(4, Math.ceil((first.maxLongs || 0) / 4) * 4);
+  const CEILING = 200;                      // LONGS_LADDER tops out here
+  const holds = r => r.strainRatio < 0.35 && r.fiberRatio < 0.30;
+
+  const top = probe(CEILING);
+  if (!holds(top)) {
+    /* Even a full ladder will not hold it. Hand back the fullest arrangement
+       so the caller can report HOW it misses rather than just saying no. */
+    return { qty: CEILING, solved: top, feasible: false };
   }
-  /* Nothing in the fit works. Hand back the fullest arrangement anyway, so
-     the caller can report HOW it misses rather than just saying no. At
-     4.5in / 2200psi, for instance, retention bottoms out at 30.2% against
-     a 30% limit even with the circumference packed. */
-  return { qty: cap, solved: probe(cap), feasible: false };
+  let lo = 1, hi = CEILING / 4;             // counting in quadrant sets of 4
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (holds(probe(mid * 4))) hi = mid; else lo = mid + 1;
+  }
+  const qty = lo * 4;
+  return { qty, solved: probe(qty), feasible: true, overFit: qty > fit };
 }
 
 /* Largest pitch that still meets burst for this braid and pass count.
@@ -104,15 +115,31 @@ function minLongs(base, longsName, prices) {
 function bestPitch(base, xbraid, passes, prices) {
   const w = (BRAID[xbraid] || {}).w || 0;
   const floor = w * 12;                                   // Inputs!F82
-  for (let i = PITCH_LADDER.length - 1; i >= 0; i--) {
-    const pitch = PITCH_LADDER[i];
-    if (pitch < floor - 1e-9) break;                      // ladder is ascending
-    const r = solve({ ...base, xbraid, pitch, passes, prices });
-    if (r.slope === null) return null;                    // wrong family, whole braid is out
-    if (r.burstTotal >= r.targetBurstR && r.burstTotal >= r.minBurst)
-      return { pitch, passes, solved: r };
+  const at = i => solve({ ...base, xbraid, pitch: PITCH_LADDER[i], passes, prices });
+  const ok = r => r.burstTotal >= r.targetBurstR && r.burstTotal >= r.minBurst;
+
+  let lo = 0;                                             // first legal pitch
+  while (lo < PITCH_LADDER.length && PITCH_LADDER[lo] < floor - 1e-9) lo++;
+  if (lo >= PITCH_LADDER.length) return null;
+
+  const finest = at(lo);
+  if (finest.slope === null) return null;                 // wrong family, braid is out
+  /* Not even the finest legal pitch makes the burst. Hand it back anyway -
+     it is the most this braid can do, and the caller reports that rather
+     than just saying no. */
+  if (!ok(finest)) return { pitch: PITCH_LADDER[lo], passes, solved: finest, short: true };
+
+  /* Burst falls as the pitch grows, so the cheapest pitch that still passes
+     is the LARGEST one that passes, and a monotonic sequence can be
+     bisected. Walking the ladder cost up to 144 solves per braid and pass
+     count - about 1,300 for a 6in design, which was felt on a keystroke. */
+  let a = lo, b = PITCH_LADDER.length - 1, bestI = lo, bestR = finest;
+  while (a <= b) {
+    const mid = (a + b) >> 1;
+    const r = at(mid);
+    if (ok(r)) { bestI = mid; bestR = r; a = mid + 1; } else b = mid - 1;
   }
-  return null;
+  return { pitch: PITCH_LADDER[bestI], passes, solved: bestR };
 }
 
 /* ---------------------------------------------------------------------
@@ -155,12 +182,21 @@ export function optimise(base, prices, opts = {}) {
       if (!hit) continue;
 
       for (const longsName of optimiserLongs(degC)) {
-        const lp = minLongs({ ...base, xbraid, pitch: hit.pitch, passes }, longsName, prices);
         considered++;
-        if (!lp) continue;                                  // no such longs
+        let qty;
+        if (hit.short) {
+          const probe = solve({ ...base, xbraid, pitch: hit.pitch, passes,
+                                longs: longsName, longsQty: 4, prices });
+          if (!probe.longsStr) continue;                    // no such longs
+          qty = Math.max(4, Math.ceil((probe.maxLongs || 0) / 4) * 4);
+        } else {
+          const lp = minLongs({ ...base, xbraid, pitch: hit.pitch, passes }, longsName, prices);
+          if (!lp) continue;                                // no such longs
+          qty = lp.qty;
+        }
 
         const cand = { ...base, xbraid, pitch: hit.pitch, passes,
-                       longs: longsName, longsQty: lp.qty };
+                       longs: longsName, longsQty: qty };
         const r = solve({ ...cand, prices });
         const chk = checkDesign(r);
         const row = { inputs: cand, costPerFt: r.costPerFt, burst: r.burstTotal,
@@ -169,9 +205,11 @@ export function optimise(base, prices, opts = {}) {
 
         if (!chk.ok) {
           // Keep the closest miss so the UI can explain the refusal.
-          if (!nearest || chk.hard.length < nearest.blockers.length
-              || (chk.hard.length === nearest.blockers.length
-                  && r.costPerFt < nearest.costPerFt)) nearest = row;
+          const closer = !nearest
+            || chk.hard.length < nearest.blockers.length
+            || (chk.hard.length === nearest.blockers.length
+                && r.burstTotal > nearest.burst);
+          if (closer) nearest = row;
           continue;
         }
         tried.push(row);
