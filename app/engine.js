@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode
-} from "./data.js?v=20261014-2239";
+} from "./data.js?v=20261015-0915";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -144,6 +144,18 @@ export function solve(inp) {
   o.base.forEach(L => { L.wt = annulusWt(L.od, L.id, L.sg); L.cost = L.wt * L.price; });
   o.baseWt   = o.base.reduce((s,L)=>s+L.wt,   0);            // G38
   o.baseCost = o.base.reduce((s,L)=>s+L.cost, 0);            // I38
+  /* A layer cannot be thinner than nothing. Where the pipe table carries no
+     wall for a size (1" has X:-0.03), the annulus weight comes out NEGATIVE
+     and SUBTRACTS from the cost and weight of the pipe - and unlike the
+     jacket, which has a 0.07" minimum rule, nothing downstream looked at
+     these. Reported here and blocked as a hard design rule. */
+  o.minBaseThk = Math.min(...o.base.map(L => L.thk));
+  if (o.minBaseThk < 0) {
+    const bad = o.base.filter(L => L.thk < 0).map(L => `${L.name} ${L.thk.toFixed(3)}"`);
+    warn.push(`Base layer wall is negative (${bad.join(", ")}), so that layer `
+            + `subtracts from the cost and weight instead of adding to them. `
+            + `Inputs!N8:U24 carries no usable wall for "${o.sizeKey}".`);
+  }
   o.baseOD   = o.linerID + 2*o.specWT;                       // D38 — liner OD from spec WT
 
   /* ---------------- 4. braid geometry (Inputs!A55:H59, A76) ----------- */
@@ -277,6 +289,11 @@ export function solve(inp) {
   o.tVector   = o.tApplied / Math.atan(o.tAngle);                       // F64
   o.tWt       = (nz(BT.wt) * 24 * o.tPitchLen) / 12;                    // G64
   o.tPrice    = braidPrice(o.tBraid, pb);
+  /* Only the 24-Tensile application adds tCost to the headline, so only it
+     can be understated by a missing price - but it must be reported like
+     every other lookup, or the design silently costs the tensile layer at
+     zero. That is the contract at the top of this file. */
+  if (o.is24T && o.tPrice === null) missingPrices.push(o.tBraid);
   o.tCost     = o.tWt * nz(o.tPrice);                                   // I64
   o.tensileStrength = (o.is24T ? o.tVector : 0) + o.longsStrength;      // G11
 

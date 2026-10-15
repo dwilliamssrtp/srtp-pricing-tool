@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-2239";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-2239";
-import * as DB from "./db.js?v=20261014-2239";
-import { initPages } from "./pages.js?v=20261014-2239";
-import * as PARTSUI from "./partsui.js?v=20261014-2239";
-import * as QUOTESUI from "./quotesui.js?v=20261014-2239";
-import * as MDS from "./mds.js?v=20261014-2239";
-import { optimise, designRules } from "./optimise.js?v=20261014-2239";
+} from "./data.js?v=20261015-0915";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-0915";
+import * as DB from "./db.js?v=20261015-0915";
+import { initPages } from "./pages.js?v=20261015-0915";
+import * as PARTSUI from "./partsui.js?v=20261015-0915";
+import * as QUOTESUI from "./quotesui.js?v=20261015-0915";
+import * as MDS from "./mds.js?v=20261015-0915";
+import { optimise, designRules } from "./optimise.js?v=20261015-0915";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -45,7 +45,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-2239";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261015-0915";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))

@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261014-2239";
-import { solve, requiredYarnType } from "./engine.js?v=20261014-2239";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261015-0915";
+import { solve, requiredYarnType } from "./engine.js?v=20261015-0915";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -56,6 +56,9 @@ export function designRules(r) {
     { label: "Jacket wall", hard: true, fmt: "in", unit: "in", cmp: "≥",
       ok: !(r.jacketThk < 0.07), got: r.jacketThk, need: 0.07,
       msg: "jacket wall below the 0.07 in minimum" },
+    { label: "Base layer walls", hard: true, fmt: "in", unit: "in", cmp: ">",
+      ok: !(r.minBaseThk <= 0), got: r.minBaseThk, need: 0,
+      msg: "a base layer wall is zero or negative" },
     { label: "Pitch vs braid width", hard: false, fmt: "in", unit: "in", cmp: "≥",
       ok: !(r.pitch < r.minPitch - 1e-9), got: r.pitch, need: r.minPitch,
       msg: "pitch under the braid-width minimum" },
