@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261015-1538";
-import { solve } from "./engine.js?v=20261015-1538";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261015-1538";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261015-1538";
+import * as DB from "./db.js?v=20261015-1550";
+import { solve } from "./engine.js?v=20261015-1550";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261015-1550";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261015-1550";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];

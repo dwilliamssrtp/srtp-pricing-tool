@@ -234,6 +234,13 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 .subtabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
 .subtabs button:hover{color:var(--ink)}
 
+/* One reel option per line inside its cell, so three options stay readable
+   in a table row. Red means the 20D bend rule rules that reel out. */
+.reelopt{display:block;font-size:11.5px;line-height:1.5;white-space:nowrap;color:var(--ink2)}
+.reelopt b{color:var(--ink);font-weight:600}
+.reelopt.bad b{color:var(--bad)}
+.reelopt i{font-style:normal;color:var(--bad);font-size:10.5px}
+
 /* Health dot on a saved design: green passes, amber allowed-with-warnings,
    red breaks a hard rule, grey not checked. The reason is in the title. */
 .hdot{display:inline-block;width:9px;height:9px;border-radius:50%;
@@ -599,6 +606,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261015-1538"></script>
+<script type="module" src="app/ui.js?v=20261015-1550"></script>
 </body>
 </html>

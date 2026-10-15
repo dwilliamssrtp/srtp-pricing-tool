@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261015-1538";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1538";
-import * as DB from "./db.js?v=20261015-1538";
-import { initPages } from "./pages.js?v=20261015-1538";
-import * as PARTSUI from "./partsui.js?v=20261015-1538";
-import * as QUOTESUI from "./quotesui.js?v=20261015-1538";
-import * as MDS from "./mds.js?v=20261015-1538";
-import { optimise, designRules } from "./optimise.js?v=20261015-1538";
+} from "./data.js?v=20261015-1550";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1550";
+import * as DB from "./db.js?v=20261015-1550";
+import { initPages } from "./pages.js?v=20261015-1550";
+import * as PARTSUI from "./partsui.js?v=20261015-1550";
+import * as QUOTESUI from "./quotesui.js?v=20261015-1550";
+import * as MDS from "./mds.js?v=20261015-1550";
+import { optimise, designRules } from "./optimise.js?v=20261015-1550";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -76,7 +76,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261015-1538";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261015-1550";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -341,12 +341,26 @@ function renderInputs() {
    the pipe we actually build. The mapping was given for 2-5 inch; 6 inch is
    matched to 6.8 because that is the only pipe whose liner ID is the 5.6 in
    the table (PIPE["6.8"].Q), but it is an inference, not a given. */
+/* Reels, for the standard table only - the Designer keeps its own picker.
+   SP is the flange diameter in INCHES, so the reel's name in feet is SP/12:
+   96 = 8 ft, 144 = 12 ft, 174 = 14.5 ft. */
+const REEL_8    = { label:"8 ft",             sp:96,  hub:68,  t:56 };
+const REEL_12   = { label:"12 ft",            sp:144, hub:108, t:80 };
+const REEL_12D  = { label:"12 ft domestic",   sp:144, hub:108, t:92 };
+const REEL_145  = { label:"14.5 ft foreign",  sp:174, hub:120, t:80 };
+const REEL_145D = { label:"14.5 ft domestic", sp:174, hub:120, t:92 };
+
 const STD_SIZES = [
-  { nom:'2"', design:"2.375", tableID:2.0, psis:[300,500,750,1500,2250,3000,3500] },
-  { nom:'3"', design:"3.5",   tableID:3.0, psis:[300,500,750,1500,2250,3000] },
-  { nom:'4"', design:"4.5",   tableID:4.0, psis:[300,500,750,1500,2250] },
-  { nom:'5"', design:"6",     tableID:5.0, psis:[300,500,750,1500,2250] },
-  { nom:'6"', design:"6.8",   tableID:5.6, psis:[300,500,750,1500,2250] }
+  { nom:'2"', design:"2.375", tableID:2.0, psis:[300,500,750,1500,2250,3000,3500],
+    reels:[REEL_8, REEL_12] },
+  { nom:'3"', design:"3.5",   tableID:3.0, psis:[300,500,750,1500,2250,3000],
+    reels:[REEL_12] },
+  { nom:'4"', design:"4.5",   tableID:4.0, psis:[300,500,750,1500,2250],
+    reels:[REEL_12] },
+  { nom:'5"', design:"6",     tableID:5.0, psis:[300,500,750,1500,2250],
+    reels:[REEL_145, REEL_12D, REEL_145D] },
+  { nom:'6"', design:"6.8",   tableID:5.6, psis:[300,500,750,1500,2250],
+    reels:[REEL_145, REEL_12D, REEL_145D] }
 ];
 const STD_TEMPS = [150, 185, 196, 221];
 let STANDARD_ROWS = null;      // built on demand, then cached for the session
@@ -361,7 +375,22 @@ function buildStandard() {
         try { res = optimise({ ...base }, PRICES, { objective:"fewest_passes" }); }
         catch (e) { err = e.message; }
         const hit = res && (res.best || res.nearest);
-        rows.push({ ...sz, psi, degF, err,
+        /* The optimiser returns the braid it chose, not the finished pipe, so
+           the design is solved once more to get the jacket OD the reel wrap
+           is measured on. reelFit also reports the 20D bend minimum, which is
+           what says whether a reel may be wound at all. */
+        let reels = [];
+        if (hit) {
+          try {
+            const solved = solve({ ...base, ...hit.inputs, prices:PRICES });
+            reels = sz.reels.map(rl => {
+              const fit = reelFit(solved.jacketOD, rl.sp, rl.hub, rl.t);
+              return { ...rl, ft:Math.floor(fit.capacity || 0), ok:fit.ok,
+                       bendD:fit.bendD, jacketOD:solved.jacketOD };
+            });
+          } catch (e) { reels = []; }
+        }
+        rows.push({ ...sz, psi, degF, err, reels,
           passes: hit ? hit.inputs.passes : null,
           clean: !!(res && res.best),
           inputs: hit ? { ...base, ...hit.inputs } : null,
@@ -401,6 +430,16 @@ function standardHTML() {
       { v: r ? `${f0(r.inputs.longsQty)} \u00d7 ` + String(r.inputs.longs).replace(/ \(.*/, "") : "\u2014" },
       { v: r ? money(r.costPerFt) : "\u2014", n:1 },
       { v: r ? f0(r.burst)+" psi" : "\u2014", n:1 },
+      { v: (d.reels || []).map(rl =>
+          `<span class="reelopt${rl.ok ? "" : " bad"}" title="${esc(rl.label)} `
+          + `· SP${rl.sp} HD${rl.hub} T${rl.t} · hub/OD ${f(rl.bendD,1)}D`
+          + `${rl.ok ? "" : " — under the 20D bend minimum, so this reel cannot be wound"}">`
+          + `${esc(rl.label)} <b>${f0(rl.ft)} ft</b>`
+          /* The footage is still shown when the bend rule fails, because the
+             number is what says how close the reel is to usable - "no" alone
+             hides that. The ratio next to it is why it is flagged. */
+          + `${rl.ok ? "" : ` <i>${f(rl.bendD,1)}D</i>`}</span>`
+        ).join("") || "—", raw:true },
       { v: status, raw:true },
       { v: r ? `<button data-std="${i}">Open</button>` : "", raw:true }
     ]});
@@ -416,9 +455,15 @@ function standardHTML() {
       <button id="stdCSV">Export CSV</button>
     </div>
     ${tbl([{t:"MAOP",n:1},{t:"Temp",n:1},"X-braid",{t:"Pitch",n:1},{t:"Passes",n:1},
-           "Longs",{t:"$/ft",n:1},{t:"Burst",n:1},"Status",""], rows)}
+           "Longs",{t:"$/ft",n:1},{t:"Burst",n:1},"Reels &middot; feet per reel",
+           "Status",""], rows)}
     <p class="ref" style="margin:10px 0 0">6&quot; nominal is matched to the 6.8 design pipe,
-      whose liner ID is the 5.6 in on the table. The other four mappings were given.</p>`;
+      whose liner ID is the 5.6 in on the table. The other four mappings were given.
+      Reels: 2&quot; on 8 ft (SP96&middot;HD68&middot;T56) with a 12 ft
+      (SP144&middot;HD108&middot;T80) option; 3&quot; and 4&quot; on 12 ft;
+      5&quot; and 6&quot; on 14.5 ft foreign (SP174&middot;HD120&middot;T80) or
+      domestic T92 at 12 and 14.5 ft. A reel reading <b>no</b> is under the 20D
+      bend minimum for that pipe.</p>`;
 }
 
 function renderDesignTab() {
@@ -450,12 +495,14 @@ function exportStandardCSV() {
       r ? r.inputs.pitch : "", r ? r.inputs.passes : "",
       r ? String(r.inputs.longs).replace(/ \(.*/, "") : "", r ? r.inputs.longsQty : "",
       r ? r.costPerFt.toFixed(4) : "", r ? Math.round(r.burst) : "",
+      (d.reels || []).map(rl => `${rl.label} SP${rl.sp}/HD${rl.hub}/T${rl.t}: `
+        + (rl.ok ? rl.ft + " ft" : "under 20D bend")).join(" | "),
       d.err ? "error" : !r ? "nothing configures" : !d.clean ? "short" : d.warnings.length ? "allowed" : "ok",
       d.err || (!d.clean ? d.blockers.join("; ") : d.warnings.join("; "))];
   });
   downloadCSV(`srtp-standard-designs-${new Date().toISOString().slice(0,10)}.csv`,
     toCSV(["Nominal","Design pipe","Table ID in","MAOP psi","Temp F","X-braid","Pitch in",
-           "Passes","Longs","Longs qty","Cost $/ft","Burst psi","Status","Detail"], out));
+           "Passes","Longs","Longs qty","Cost $/ft","Burst psi","Reels","Status","Detail"], out));
 }
 
 document.addEventListener("click", e => {
