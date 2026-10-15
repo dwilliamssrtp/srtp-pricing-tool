@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261014-2228";
-import { solve, requiredYarnType } from "./engine.js?v=20261014-2228";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261014-2239";
+import { solve, requiredYarnType } from "./engine.js?v=20261014-2239";
 
 /* What "works" means, split the way the workbook actually behaves.
 

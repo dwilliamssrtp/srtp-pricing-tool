@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261014-2228";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-2228";
-import * as DB from "./db.js?v=20261014-2228";
-import { initPages } from "./pages.js?v=20261014-2228";
-import * as PARTSUI from "./partsui.js?v=20261014-2228";
-import * as QUOTESUI from "./quotesui.js?v=20261014-2228";
-import * as MDS from "./mds.js?v=20261014-2228";
-import { optimise, designRules } from "./optimise.js?v=20261014-2228";
+} from "./data.js?v=20261014-2239";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261014-2239";
+import * as DB from "./db.js?v=20261014-2239";
+import { initPages } from "./pages.js?v=20261014-2239";
+import * as PARTSUI from "./partsui.js?v=20261014-2239";
+import * as QUOTESUI from "./quotesui.js?v=20261014-2239";
+import * as MDS from "./mds.js?v=20261014-2239";
+import { optimise, designRules } from "./optimise.js?v=20261014-2239";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -29,8 +29,23 @@ let DESIGN_ROWS = [], DESIGN_SEARCH = "";
 let AUTO_CFG = true;           // re-solve the braid when the duty changes
 let AUTO_MODE = "cheapest";    // "cheapest" or "fewest_passes" - one or the other
 let OPT_NOTE = "Set a size, pressure and temperature to configure.";
+/* The braid fields as they were before the optimiser last overwrote them.
+   Optimise now loads its answer straight into the inputs, including the
+   closest-but-failing one, so a hand-tuned design can vanish on one click.
+   Null when there is nothing to put back. */
+let OPT_UNDO = null;
+const BRAID_KEYS = ["xbraid", "pitch", "passes", "longs", "longsQty"];
+const braidSnap = () => Object.fromEntries(BRAID_KEYS.map(k => [k, I[k]]));
+const sameBraid = (x, y) => !!x && !!y && BRAID_KEYS.every(k => x[k] === y[k]);
+/* One definition, because the button is rendered from two places: with the
+   input grid when it is rebuilt, and injected next to the note when a duty
+   edit re-solves the braid WITHOUT rebuilding the grid (rebuilding mid-edit
+   recreates the box being typed in). */
+const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
+  + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
+  + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261014-2228";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261014-2239";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -258,7 +273,7 @@ function renderInputs() {
      </select>`,
     `<label>&nbsp;</label><div class="derived" style="grid-column:2/-1">
        <span id="optFlash" class="ok"></span><span id="d_opt"
-         title="${esc(OPT_NOTE)}">${esc(OPT_NOTE)}</span></div>`,
+         title="${esc(OPT_NOTE)}">${esc(OPT_NOTE)}</span>${OPT_UNDO ? UNDO_BTN : ""}</div>`,
     `<div class="chk" id="d_check"></div>`,
     field("X-braid (hoop)","xbraid","select",{opts:XBRAIDS}),
     field("Pitch","pitch","select",{opts:PITCH_LADDER,unit:"in"}),
@@ -363,10 +378,18 @@ function renderDisplay() {
       vd(r.psi<=r.couplingMaxP?"OK":"Exceeded", r.psi<=r.couplingMaxP), {v:"B12",cls:"ref"}]
   ]);
 
+  /* Share of the $/ft, as a number and a bar. The table already listed every
+     layer's cost; what it could not show at a glance was which layers the
+     money actually goes to - usually reinforcement plus longs over half. */
+  const share = c => {
+    const q = r.costPerFt ? c / r.costPerFt : 0;
+    return { v:`<span class="shr"><i style="width:${(q*100).toFixed(1)}%"></i></span>`
+              + `<b>${(q*100).toFixed(1)}%</b>`, raw:true, cls:"shrcell" };
+  };
   const L = (n,w,p,c) => [n, {v:f4(w),n:1}, {v:money(p,3),n:1}, {v:money(c,4),n:1},
-                          {v:money(c*r.lengthFt,0),n:1}];
+                          share(c), {v:money(c*r.lengthFt,0),n:1}];
   document.getElementById("costTbl").innerHTML = tbl(
-    ["Layer","lbs/ft","$/lb","$/ft",{t:"Project $",n:1}], [
+    ["Layer","lbs/ft","$/lb","$/ft",{t:"Share",n:1},{t:"Project $",n:1}], [
     {group:"Base tube — Inputs!A34:I38"},
     L(r.linerLabel, r.base[0].wt, r.base[0].price, r.base[0].cost),
     L(r.bondLabel, r.base[1].wt, r.base[1].price, r.base[1].cost),
@@ -379,9 +402,9 @@ function renderDisplay() {
     L(r.jacketLabel, r.jacketWt, r.jacketPrice, r.jacketCost),
     L(r.colorLabel, r.colorWt, r.colorPrice, r.colorCost),
     {cls:"tot", cells:["Total", {v:f4(r.weightPerFt),n:1}, {v:"",n:1},
-      {v:money(r.costPerFt,4),n:1}, {v:money(r.projectCost,0),n:1}]},
+      {v:money(r.costPerFt,4),n:1}, {v:"100%",n:1}, {v:money(r.projectCost,0),n:1}]},
     {cls:"tot", cells:[`Sell @ ${pct(r.margin,0)} margin`, {v:"",n:1}, {v:"",n:1},
-      {v:money(r.sellPerFt,4),n:1}, {v:money(r.projectPrice,0),n:1}]}
+      {v:money(r.sellPerFt,4),n:1}, {v:"",n:1}, {v:money(r.projectPrice,0),n:1}]}
   ]);
 
   document.getElementById("warns").innerHTML = r.warnings.length
@@ -1441,7 +1464,7 @@ function renderDesignList() {
     ? `${d.summary.sizeKey ?? ""} ${d.summary.psi ?? ""} ${d.summary.degF ?? ""} ${d.summary.app ?? ""}`
     : "";
   const rows = DESIGN_ROWS.filter(d => {
-    const hay = `${d.name} ${d.client || ""} ${duty(d)}`.toLowerCase();
+    const hay = `${d.name} ${d.client || ""} ${duty(d)} ${d.notes || ""}`.toLowerCase();
     return words.every(w => hay.includes(w));
   });
   const count = document.getElementById("designCount");
@@ -1451,7 +1474,10 @@ function renderDesignList() {
   if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">Nothing matches that.</p>`; return; }
   host.innerHTML = tbl(["Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
       rows.map(d => [
-        d.name, d.client || "—",
+        {v: esc(d.name) + (d.notes
+            ? `<br><span class="ref" style="font-weight:400">${esc(d.notes)}</span>` : ""),
+          raw:true},
+        d.client || "—",
         {v: d.summary?.costPerFt != null ? money(d.summary.costPerFt) : "—", n:1},
         {v: d.summary?.weightPerFt != null ? f3(d.summary.weightPerFt) : "—", n:1},
         {v: d.summary?.burst != null ? f0(d.summary.burst) + " psi" : "—", n:1},
@@ -1471,9 +1497,13 @@ async function openDesign(id) {
   // field shows it too — the two are one value, not two.
   if (d.client) I.client = d.client;
   recalc({ rebuild: true });
-  markBaseline(); showDirty();
   document.getElementById("designName").value = d.name;
   document.getElementById("designClient").value = I.client || "";
+  /* Before markBaseline, which now reads this field: taking the baseline
+     first would capture the previous design's note and flag the freshly
+     opened design as already modified. */
+  document.getElementById("designNote").value = d.notes || "";
+  markBaseline(); showDirty();
   setStatus(`Opened "${d.name}".`);
 }
 
@@ -1481,6 +1511,7 @@ async function doSave(asCopy) {
   const nameEl = document.getElementById("designName");
   let   name   = nameEl.value.trim();
   const client = document.getElementById("designClient").value.trim() || I.client;
+  const notes  = document.getElementById("designNote").value.trim();
   if (!name) { setStatus("Give the design a name first.", true); return; }
   /* A copy under the same name would be two rows you cannot tell apart, so
      it gets one - rename it and the suffix goes. */
@@ -1494,7 +1525,7 @@ async function doSave(asCopy) {
   };
   try {
     const saved = await DB.saveDesign({
-      id: asCopy ? null : CURRENT_DESIGN?.id, name, client, inputs: I, summary,
+      id: asCopy ? null : CURRENT_DESIGN?.id, name, client, notes, inputs: I, summary,
       priceBookId: BOOK ? BOOK.id : null
     });
     CURRENT_DESIGN = { id: saved.id, name: saved.name, client: saved.client };
@@ -1510,8 +1541,15 @@ async function doSave(asCopy) {
 }
 
 /* The inputs as last opened or saved. */
-function markBaseline() { BASELINE = JSON.stringify(I); }
-function isDirty() { return !!BASELINE && JSON.stringify(I) !== BASELINE; }
+/* The note is saved with the design but is not part of I, so it has to be
+   folded into the baseline explicitly - otherwise a note typed and never
+   saved reads as "no unsaved changes" and is lost on the next Open. */
+const noteVal = () => {
+  const el = document.getElementById("designNote");
+  return el ? el.value.trim() : "";
+};
+function markBaseline() { BASELINE = JSON.stringify([I, noteVal()]); }
+function isDirty() { return !!BASELINE && JSON.stringify([I, noteVal()]) !== BASELINE; }
 function showDirty() {
   const el = document.getElementById("dirtyFlag");
   if (!el) return;
@@ -1572,10 +1610,12 @@ document.getElementById("designSearch").addEventListener("input", e => {
   DESIGN_SEARCH = e.target.value;      // filtered from rows already fetched
   renderDesignList();
 });
+document.getElementById("designNote").addEventListener("input", showDirty);
 document.getElementById("newBtn").addEventListener("click", () => {
   CURRENT_DESIGN = null; BASELINE = null; showDirty();
   document.getElementById("designName").value = "";
   document.getElementById("designClient").value = I.client;
+  document.getElementById("designNote").value = "";
   setStatus("Started a new design. Saving will create a new record.");
 });
 
@@ -1695,6 +1735,7 @@ const pl = n => `${n} pass${n > 1 ? "es" : ""}`;
 
 function runOptimise(announce) {
   const res = optimise({ ...I }, PRICES, { objective: AUTO_MODE });
+  const was = braidSnap();
   if (res.best) {
     Object.assign(I, {
       xbraid:  res.best.inputs.xbraid,
@@ -1751,6 +1792,10 @@ function runOptimise(announce) {
     OPT_NOTE = "No configuration found for this duty — check the size, "
              + "pressure and temperature are a combination you make.";
   }
+  /* Only offer to undo a change that happened. With auto-configure on, the
+     design is usually already optimal, and an Undo that restores identical
+     values is just a button that appears to do nothing. */
+  OPT_UNDO = sameBraid(was, braidSnap()) ? null : was;
   if (announce) setStatus(res.best ? "Braid configured." : "Nothing passes for this duty.", !res.best);
   return res;
 }
@@ -1794,6 +1839,17 @@ document.addEventListener("click", e => {
 });
 
 document.addEventListener("click", e => {
+  if (!e.target.closest("#optUndo")) return;
+  e.preventDefault();
+  if (!OPT_UNDO) return;
+  Object.assign(I, OPT_UNDO);
+  OPT_UNDO = null;
+  OPT_NOTE = "Put back the braid you had before Optimise ran.";
+  recalc({ rebuild: true });
+  flashOpt("Reverted.");
+});
+
+document.addEventListener("click", e => {
   if (!e.target.closest("#optBtn")) return;
   e.preventDefault();
   const sig = () => JSON.stringify([I.xbraid, I.pitch, I.passes, I.longs, I.longsQty]);
@@ -1826,4 +1882,7 @@ function syncBraidControls() {
   }
   const note = document.getElementById("d_opt");
   if (note) { note.textContent = OPT_NOTE; note.title = OPT_NOTE; }
+  const row = note && note.parentElement, u = document.getElementById("optUndo");
+  if (row && OPT_UNDO && !u) row.insertAdjacentHTML("beforeend", UNDO_BTN);
+  else if (u && !OPT_UNDO) u.remove();
 }

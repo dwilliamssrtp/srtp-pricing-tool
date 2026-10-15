@@ -1,7 +1,7 @@
 /* =====================================================================
    Supabase client, session handling and data access.
    ===================================================================== */
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261014-2228";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JS } from "./config.js?v=20261014-2239";
 
 const { createClient } = await import(SUPABASE_JS);
 

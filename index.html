@@ -217,6 +217,15 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
   background:color-mix(in srgb,var(--accent2) 6%,var(--bg2));padding:4px}
 #spool .inner{background:var(--bg);border-radius:11px;padding:18px}
 #spool h2.sec{margin-top:0;color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 40%,var(--line))}
+/* Cost share: a bar behind the percentage, so the eye finds the big layers
+   without reading the numbers. The bar is sized in % of the cell, so it
+   needs no measuring and survives any column width. */
+.shrcell{white-space:nowrap}
+.shr{display:inline-block;width:52px;height:7px;margin-right:6px;vertical-align:1px;
+  background:var(--bg2);border:1px solid var(--line2);border-radius:3px;overflow:hidden}
+.shr i{display:block;height:100%;background:var(--accent)}
+.shrcell b{font-weight:600;font-variant-numeric:tabular-nums}
+
 .tag{display:inline-block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   background:var(--accent2);color:#06101c;border-radius:4px;padding:2px 7px;font-weight:700;vertical-align:2px;margin-left:8px}
 
@@ -441,7 +450,13 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
         <span id="saveStatus"></span>
       </div>
       <div class="savebar" style="margin-top:2px">
-        <input id="designSearch" type="search" placeholder="Search designs &mdash; name, client or duty"
+        <input id="designNote" type="text" maxlength="300"
+          placeholder="Note &mdash; why this design, who it was quoted for"
+          title="Saved with the design. Shows in the list below."
+          style="flex:1 1 320px">
+      </div>
+      <div class="savebar" style="margin-top:2px">
+        <input id="designSearch" type="search" placeholder="Search designs &mdash; name, client, duty or note"
           style="flex:1 1 260px">
         <span id="designCount" class="ref"></span>
       </div>
@@ -556,6 +571,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261014-2228"></script>
+<script type="module" src="app/ui.js?v=20261014-2239"></script>
 </body>
 </html>
