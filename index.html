@@ -9,7 +9,7 @@
   --bg:#0f1318; --bg2:#151b22; --card:#1a222b; --card2:#202a35;
   --line:#2b3744; --line2:#3a4855;
   --ink:#e8edf2; --ink2:#a3b1be; --ink3:#6f7f8d;
-  --accent:#ff8a3d; --accent2:#4aa8ff; --ok:#3ddc97; --warn:#ffcc4d; --bad:#ff5d5d;
+  --accent:#2ad4d4; --accent2:#4aa8ff; --ok:#3ddc97; --warn:#ffcc4d; --bad:#ff5d5d;
   --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
   --sans:"Segoe UI",Inter,system-ui,-apple-system,sans-serif;
 }
@@ -17,14 +17,14 @@
   --bg:#eef1f4; --bg2:#e4e9ee; --card:#ffffff; --card2:#f5f7f9;
   --line:#d4dbe2; --line2:#bcc7d1;
   --ink:#16202a; --ink2:#4d5e6e; --ink3:#7b8b99;
-  --accent:#d2690f; --accent2:#1668c4; --ok:#0f8a5f; --warn:#9a6b00; --bad:#c2281f;
+  --accent:#0b8a90; --accent2:#1668c4; --ok:#0f8a5f; --warn:#9a6b00; --bad:#c2281f;
 }
 @media (prefers-color-scheme: light){
   :root:not([data-theme="dark"]){
     --bg:#eef1f4; --bg2:#e4e9ee; --card:#ffffff; --card2:#f5f7f9;
     --line:#d4dbe2; --line2:#bcc7d1;
     --ink:#16202a; --ink2:#4d5e6e; --ink3:#7b8b99;
-    --accent:#d2690f; --accent2:#1668c4; --ok:#0f8a5f; --warn:#9a6b00; --bad:#c2281f;
+    --accent:#0b8a90; --accent2:#1668c4; --ok:#0f8a5f; --warn:#9a6b00; --bad:#c2281f;
   }
 }
 *{box-sizing:border-box}
@@ -50,7 +50,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-fo
 .pagenav button{border:0;background:transparent;color:var(--ink2);border-radius:6px;
   padding:6px 16px;font-size:13px;font-weight:600}
 .pagenav button:hover{color:var(--ink);background:var(--card)}
-.pagenav button[aria-selected="true"]{background:var(--accent);color:#17120c}
+.pagenav button[aria-selected="true"]{background:var(--accent);color:#062022}
 .hdkpi{display:flex;gap:10px;flex-wrap:wrap}
 .hdkpi div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 11px;line-height:1.25}
 .hdkpi em{display:block;font-style:normal;font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em}
@@ -59,7 +59,7 @@ button,select,input{font:inherit;color:var(--ink);background:var(--card2);border
   border-radius:6px;padding:5px 8px}
 button{cursor:pointer;background:var(--card2)}
 button:hover{border-color:var(--accent)}
-button.pri{background:var(--accent);color:#17120c;border-color:var(--accent);font-weight:600}
+button.pri{background:var(--accent);color:#062022;border-color:var(--accent);font-weight:600}
 :root[data-theme="light"] button.pri,
 @media (prefers-color-scheme: light){button.pri{color:#fff}}
 input:focus,select:focus{outline:2px solid var(--accent2);outline-offset:-1px}
@@ -621,6 +621,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261016-0841"></script>
+<script type="module" src="app/ui.js?v=20261016-0936"></script>
 </body>
 </html>
