@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261015-1626";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261015-1626";
-import * as DB from "./db.js?v=20261015-1626";
-import { initPages } from "./pages.js?v=20261015-1626";
-import * as PARTSUI from "./partsui.js?v=20261015-1626";
-import * as QUOTESUI from "./quotesui.js?v=20261015-1626";
-import * as MDS from "./mds.js?v=20261015-1626";
-import { optimise, designRules } from "./optimise.js?v=20261015-1626";
+} from "./data.js?v=20261016-0834";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261016-0834";
+import * as DB from "./db.js?v=20261016-0834";
+import { initPages } from "./pages.js?v=20261016-0834";
+import * as PARTSUI from "./partsui.js?v=20261016-0834";
+import * as QUOTESUI from "./quotesui.js?v=20261016-0834";
+import * as MDS from "./mds.js?v=20261016-0834";
+import { optimise, designRules } from "./optimise.js?v=20261016-0834";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -26,6 +26,9 @@ let CURRENT_DESIGN = null;     // {id,name,client} when a saved design is open
    design, instead of leaving you to guess. */
 let BASELINE = null;
 let DESIGN_ROWS = [], DESIGN_SEARCH = "";
+/* Whether the Designs card is open. Collapsed it shows only the design that
+   is open, which is the useful line once the saved list runs long. */
+let DESIGNS_OPEN = true;
 /* Which sheet the Designs card is showing: the saved list or the standard
    table. It is a panel swap inside the Designer, not a page of its own. */
 let DESIGN_TAB = "saved";
@@ -76,7 +79,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261015-1626";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261016-0834";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -470,6 +473,41 @@ function standardHTML() {
       or domestic (SP174&middot;HD148&middot;T92). A reel reading <b>no</b> is under the 20D
       bend minimum for that pipe.</p>`;
 }
+
+function renderDesignsBox() {
+  const body = document.getElementById("designsBody");
+  const head = document.getElementById("designsToggle");
+  const sum  = document.getElementById("designsSummary");
+  if (!body || !head || !sum) return;
+  body.hidden = !DESIGNS_OPEN;
+  head.setAttribute("aria-expanded", String(DESIGNS_OPEN));
+  const chev = head.querySelector(".chev");
+  if (chev) chev.innerHTML = DESIGNS_OPEN ? "&#9662;" : "&#9656;";
+  /* Expanded, the save bar below already says all of this, so the header
+     stays quiet and only the collapsed line carries it. */
+  if (DESIGNS_OPEN) { sum.innerHTML = ""; return; }
+  const nameEl = document.getElementById("designName");
+  const typed  = nameEl ? nameEl.value.trim() : "";
+  const name   = CURRENT_DESIGN ? CURRENT_DESIGN.name : (typed || "Unsaved design");
+  const bits   = [`<b>${esc(name)}</b>`];
+  if (R) bits.push(`${esc(R.sizeKey)} · ${f0(R.psi)} psi · ${f0(R.degF)} °F`,
+                   `${money(R.costPerFt)}/ft`);
+  if (isDirty()) bits.push(`<span class="dirty">● unsaved</span>`);
+  sum.innerHTML = bits.join(" · ");
+}
+
+document.addEventListener("click", e => {
+  if (!e.target.closest("#designsToggle")) return;
+  DESIGNS_OPEN = !DESIGNS_OPEN;
+  try { localStorage.setItem(LS + "-designsopen", DESIGNS_OPEN ? "1" : "0"); } catch (err) {}
+  renderDesignsBox();
+});
+document.addEventListener("keydown", e => {
+  if (!e.target.closest("#designsToggle")) return;
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  e.target.closest("#designsToggle").click();
+});
 
 function renderDesignTab() {
   const saved = document.getElementById("savedPane");
@@ -1896,6 +1934,7 @@ const noteVal = () => {
 function markBaseline() { BASELINE = JSON.stringify([I, noteVal()]); }
 function isDirty() { return !!BASELINE && JSON.stringify([I, noteVal()]) !== BASELINE; }
 function showDirty() {
+  renderDesignsBox();
   const el = document.getElementById("dirtyFlag");
   if (!el) return;
   const d = isDirty();
@@ -2038,10 +2077,13 @@ async function enterApp(profile) {
   try {
     const t = localStorage.getItem(LS + "-designtab");
     if (t === "saved" || t === "standard") DESIGN_TAB = t;
+    const o = localStorage.getItem(LS + "-designsopen");
+    if (o === "0" || o === "1") DESIGNS_OPEN = o === "1";
   } catch (e) {}
   recalc({ rebuild: true });
   refreshDesignList();
   renderDesignTab();
+  renderDesignsBox();
 }
 
 async function boot() {
