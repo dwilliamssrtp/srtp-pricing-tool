@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261016-0834";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261016-0834";
-import * as DB from "./db.js?v=20261016-0834";
-import { initPages } from "./pages.js?v=20261016-0834";
-import * as PARTSUI from "./partsui.js?v=20261016-0834";
-import * as QUOTESUI from "./quotesui.js?v=20261016-0834";
-import * as MDS from "./mds.js?v=20261016-0834";
-import { optimise, designRules } from "./optimise.js?v=20261016-0834";
+} from "./data.js?v=20261016-0841";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261016-0841";
+import * as DB from "./db.js?v=20261016-0841";
+import { initPages } from "./pages.js?v=20261016-0841";
+import * as PARTSUI from "./partsui.js?v=20261016-0841";
+import * as QUOTESUI from "./quotesui.js?v=20261016-0841";
+import * as MDS from "./mds.js?v=20261016-0841";
+import { optimise, designRules, SOFT } from "./optimise.js?v=20261016-0841";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -79,7 +79,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261016-0834";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261016-0841";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -380,7 +380,11 @@ function buildStandard() {
       for (const degF of STD_TEMPS) {
         const base = { ...DEFAULTS, sizeKey:sz.design, psi, degF, app:"Flowline" };
         let res = null, err = null;
-        try { res = optimise({ ...base }, PRICES, { objective:"fewest_passes" }); }
+        /* In spec on everything except carrying more longs than the bare
+           circumference fits, which is the one allowance the standard table
+           makes - braid angle and minimum pitch are not negotiable here. */
+        try { res = optimise({ ...base }, PRICES, { objective:"fewest_passes",
+              allowSoft:[SOFT.LONGS_FIT] }); }
         catch (e) { err = e.message; }
         const hit = res && (res.best || res.nearest);
         /* The optimiser returns the braid it chose, not the finished pipe, so

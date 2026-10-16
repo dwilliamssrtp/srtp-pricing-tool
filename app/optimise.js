@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261016-0834";
-import { solve, requiredYarnType } from "./engine.js?v=20261016-0834";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261016-0841";
+import { solve, requiredYarnType } from "./engine.js?v=20261016-0841";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -32,6 +32,15 @@ import { solve, requiredYarnType } from "./engine.js?v=20261016-0834";
    sheet as information, not enforced, so treating them as hard would
    reject the very design the business ships. The optimiser still prefers
    a configuration with no soft warnings over a cheaper one with them. */
+/* The soft rules by name. They are matched on by callers that will tolerate
+   one but not another, so the text lives here rather than being retyped. */
+export const SOFT = {
+  PITCH:     "pitch under the braid-width minimum",
+  ANGLE:     "braid angle under 57.3 deg",
+  LONGS_FIT: "more longs than the circumference fits"
+};
+const MIN_ANGLE = 57.3;
+
 export function designRules(r) {
   const yarn = t => (String(t || "").match(/\(([^)]+)\)/) || [, ""])[1] || "—";
   return [
@@ -61,13 +70,13 @@ export function designRules(r) {
       msg: "a base layer wall is zero or negative" },
     { label: "Pitch vs braid width", hard: false, fmt: "in", unit: "in", cmp: "≥",
       ok: !(r.pitch < r.minPitch - 1e-9), got: r.pitch, need: r.minPitch,
-      msg: "pitch under the braid-width minimum" },
+      msg: SOFT.PITCH },
     { label: "Braid angle", hard: false, fmt: "deg", cmp: "≥",
-      ok: !(r.braidAngle < 57.3), got: r.braidAngle, need: 57.3,
-      msg: "braid angle under 57.3 deg" },
+      ok: !(r.braidAngle < MIN_ANGLE), got: r.braidAngle, need: MIN_ANGLE,
+      msg: SOFT.ANGLE },
     { label: "Longs fit circumference", hard: false, fmt: "int", unit: "ea", cmp: "≤",
       ok: !(r.longsQty > r.maxLongs), got: r.longsQty, need: r.maxLongs,
-      msg: "more longs than the circumference fits" }
+      msg: SOFT.LONGS_FIT }
   ];
 }
 
@@ -115,11 +124,18 @@ function minLongs(base, longsName, prices) {
 /* Largest pitch that still meets burst for this braid and pass count.
    Scans down from the coarsest pitch and stops at the first that passes,
    because a coarser pitch always uses less yarn. */
-function bestPitch(base, xbraid, passes, prices) {
+function bestPitch(base, xbraid, passes, prices, needAngle) {
   const w = (BRAID[xbraid] || {}).w || 0;
   const floor = w * 12;                                   // Inputs!F82
   const at = i => solve({ ...base, xbraid, pitch: PITCH_LADDER[i], passes, prices });
-  const ok = r => r.burstTotal >= r.targetBurstR && r.burstTotal >= r.minBurst;
+  /* Braid angle falls as the pitch grows, exactly as burst does, so adding it
+     keeps the passing pitches a prefix of the ladder and the bisection below
+     stays valid. Rejecting a low angle AFTER the pitch was chosen does not
+     work: the coarsest pitch that makes burst is usually the one with too
+     shallow an angle, and nothing goes looking for the finer pitch that would
+     satisfy both. */
+  const ok = r => r.burstTotal >= r.targetBurstR && r.burstTotal >= r.minBurst
+                  && (!needAngle || r.braidAngle >= MIN_ANGLE);
 
   let lo = 0;                                             // first legal pitch
   while (lo < PITCH_LADDER.length && PITCH_LADDER[lo] < floor - 1e-9) lo++;
@@ -174,13 +190,20 @@ export const optimiserLongs = degC =>
 export function optimise(base, prices, opts = {}) {
   const t0 = performance.now();
   const maxPasses = opts.maxPasses ?? 3;
+  /* Soft rules the caller is willing to live with. Left unset every soft rule
+     is tolerated, which is what the Designer wants - they are advisory, and a
+     hand-built design may knowingly sit outside one. The standard table names
+     the single exception it allows, so a braid angle under 57.3 deg or a pitch
+     under the braid-width minimum is never offered there. */
+  const allowSoft = Array.isArray(opts.allowSoft) ? opts.allowSoft : null;
+  const needAngle = !!allowSoft && !allowSoft.includes(SOFT.ANGLE);
   const degC = Math.floor((base.degF - 32) * (5 / 9) + 1e-9);    // engine D7
   let considered = 0, nearest = null;
   const tried = [];
 
   for (const xbraid of optimiserBraids(degC)) {
     for (let passes = 1; passes <= maxPasses; passes++) {
-      const hit = bestPitch(base, xbraid, passes, prices);
+      const hit = bestPitch(base, xbraid, passes, prices, needAngle);
       considered++;
       if (!hit) continue;
 
@@ -206,13 +229,17 @@ export function optimise(base, prices, opts = {}) {
                       warnings: chk.soft, blockers: chk.hard, clean: chk.clean,
                       angle: r.braidAngle, weight: r.weightPerFt, solved: r };
 
-        if (!chk.ok) {
-          // Keep the closest miss so the UI can explain the refusal.
+        const badSoft = allowSoft ? chk.soft.filter(m => !allowSoft.includes(m)) : [];
+        if (!chk.ok || badSoft.length) {
+          /* Keep the closest miss so the UI can explain the refusal. A design
+             turned away only for a soft rule has no hard blockers, so it is
+             the soft ones that have to be reported, or the refusal reads as
+             having no reason at all. */
+          const why = chk.hard.length ? chk.hard : badSoft;
           const closer = !nearest
-            || chk.hard.length < nearest.blockers.length
-            || (chk.hard.length === nearest.blockers.length
-                && r.burstTotal > nearest.burst);
-          if (closer) nearest = row;
+            || why.length < nearest.blockers.length
+            || (why.length === nearest.blockers.length && r.burstTotal > nearest.burst);
+          if (closer) nearest = { ...row, blockers: why };
           continue;
         }
         tried.push(row);
