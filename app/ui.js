@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261016-0938";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261016-0938";
-import * as DB from "./db.js?v=20261016-0938";
-import { initPages } from "./pages.js?v=20261016-0938";
-import * as PARTSUI from "./partsui.js?v=20261016-0938";
-import * as QUOTESUI from "./quotesui.js?v=20261016-0938";
-import * as MDS from "./mds.js?v=20261016-0938";
-import { optimise, designRules, SOFT } from "./optimise.js?v=20261016-0938";
+} from "./data.js?v=20261016-1147";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261016-1147";
+import * as DB from "./db.js?v=20261016-1147";
+import { initPages } from "./pages.js?v=20261016-1147";
+import * as PARTSUI from "./partsui.js?v=20261016-1147";
+import * as QUOTESUI from "./quotesui.js?v=20261016-1147";
+import * as MDS from "./mds.js?v=20261016-1147";
+import { optimise, designRules, SOFT } from "./optimise.js?v=20261016-1147";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -32,6 +32,8 @@ let DESIGNS_OPEN = true;
 /* Which sheet the Designs card is showing: the saved list or the standard
    table. It is a panel swap inside the Designer, not a page of its own. */
 let DESIGN_TAB = "saved";
+/* Duty filters on the saved list: size, MAOP, temperature. Empty is "all". */
+let DESIGN_FILTER = { size:"", psi:"", degF:"" };
 /* Designs ticked for comparison, by id. */
 let COMPARE = new Set();
 /* Re-solving every saved design on each keystroke of the search box would be
@@ -79,7 +81,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261016-0938";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261016-1147";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -372,6 +374,12 @@ const STD_SIZES = [
 ];
 const STD_TEMPS = [150, 185, 196, 221];
 let STANDARD_ROWS = null;      // built on demand, then cached for the session
+/* Same three duty filters as the saved list, over the standard table. */
+let STD_FILTER = { nom:"", psi:"", degF:"" };
+const visibleStandard = () => (STANDARD_ROWS || []).filter(d =>
+     (!STD_FILTER.nom  || d.nom === STD_FILTER.nom)
+  && (!STD_FILTER.psi  || String(d.psi)  === STD_FILTER.psi)
+  && (!STD_FILTER.degF || String(d.degF) === STD_FILTER.degF));
 
 function buildStandard() {
   const rows = [];
@@ -419,13 +427,20 @@ function standardHTML() {
      open rather than behind a button. Rebuild is there for after a price
      change, since the configurations are cached for the session. */
   if (!STANDARD_ROWS) buildStandard();
+  const shown = visibleStandard();
   const rows = [];
   let lastNom = null;
-  STANDARD_ROWS.forEach((d, i) => {
+  /* The index carried into data-std is the row's place in the FULL table, not
+     in the filtered view, so Open still finds the right design. */
+  shown.forEach(d => {
+    const i = STANDARD_ROWS.indexOf(d);
     if (d.nom !== lastNom) {
       lastNom = d.nom;
-      rows.push({ group: `${d.nom} nominal \u2014 ${d.design} in design pipe `
-        + `\u00b7 ${d.psis.length} pressures \u00d7 ${STD_TEMPS.length} temperatures` });
+      /* Counted off what is on show, not off the product table, or the
+         header would still claim 7 pressures under a filter showing one. */
+      const n = shown.filter(x => x.nom === d.nom).length;
+      rows.push({ group: `${d.nom} nominal — ${d.design} in design pipe `
+        + `· ${n} dut${n === 1 ? "y" : "ies"}` });
     }
     const r = d.r;
     const status = d.err ? `<span class="bad">error</span>`
@@ -456,19 +471,35 @@ function standardHTML() {
       { v: r ? `<button data-std="${i}">Open</button>` : "", raw:true }
     ]});
   });
-  const clean = STANDARD_ROWS.filter(d => d.clean).length;
+  const clean = shown.filter(d => d.clean).length;
+  /* Options are fixed by the product table, so they never thin out as you
+     filter - every pressure stays offered even if the chosen size lacks it,
+     in which case the table simply comes back empty. */
+  const uniq = k => [...new Set(STANDARD_ROWS.map(d => d[k]))]
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric:true }));
+  const sel = (k, label, fmt) => `<select data-sfil="${k}" title="Filter by ${label}">`
+    + `<option value="">${label}: all</option>`
+    + uniq(k).map(v => `<option value="${esc(String(v))}"`
+        + `${String(STD_FILTER[k]) === String(v) ? " selected" : ""}>${esc(fmt(v))}</option>`).join("")
+    + `</select>`;
+  const filters = `<span class="filters">`
+    + sel("nom", "Size", v => v) + sel("psi", "MAOP", v => `${f0(v)} psi`)
+    + sel("degF", "Temp", v => `${f0(v)} °F`) + `</span>`;
   /* No card wrapper: this renders INSIDE the Designs card, next to the
      saved list, so another card would nest a panel in a panel. */
   return `
     <div class="savebar" style="margin:10px 0 8px">
-      <span class="ref">${STANDARD_ROWS.length} duties &middot; ${clean} configure cleanly
-        &middot; ${STANDARD_ROWS.length-clean} need review</span>
+      ${filters}
+      <span class="ref">${shown.length === STANDARD_ROWS.length
+          ? `${shown.length} duties` : `${shown.length} of ${STANDARD_ROWS.length} duties`}
+        &middot; ${clean} configure cleanly &middot; ${shown.length-clean} need review</span>
       <button id="stdBuild">Rebuild</button>
       <button id="stdCSV">Export CSV</button>
     </div>
-    ${tbl([{t:"MAOP",n:1},{t:"Temp",n:1},"X-braid",{t:"Pitch",n:1},{t:"Passes",n:1},
+    ${shown.length ? tbl([{t:"MAOP",n:1},{t:"Temp",n:1},"X-braid",{t:"Pitch",n:1},{t:"Passes",n:1},
            "Longs",{t:"$/ft",n:1},{t:"Burst",n:1},"Reels &middot; feet per reel",
-           "Status",""], rows)}
+           "Status",""], rows)
+      : `<p class="muted" style="margin:10px 0">No standard duty matches that combination.</p>`}
     <p class="ref" style="margin:10px 0 0">6&quot; nominal is matched to the 6.8 design pipe,
       whose liner ID is the 5.6 in on the table. The other four mappings were given.
       Reels: 2&quot; on 8 ft (SP96&middot;HD68&middot;T56) with a 12 ft
@@ -535,7 +566,7 @@ document.addEventListener("click", e => {
 
 function exportStandardCSV() {
   if (!STANDARD_ROWS) return;
-  const out = STANDARD_ROWS.map(d => {
+  const out = visibleStandard().map(d => {
     const r = d.r;
     return [d.nom, d.design, d.tableID, d.psi, d.degF,
       r ? String(r.inputs.xbraid).replace(/ \(.*/, "") : "",
@@ -1733,22 +1764,60 @@ async function refreshDesignList() {
 /* Filtered in place from the rows already fetched, so typing never waits on
    the network and never rebuilds the box under the caret. All words must
    match, against the name, the client and the duty summary. */
+/* The duty a saved design was built for. The summary holds it for designs
+   saved since summaries existed; inputs is the fallback. */
+function designDuty(d) {
+  const s = d.summary || {}, i = d.inputs || {};
+  return { size: s.sizeKey ?? i.sizeKey ?? "", psi: s.psi ?? i.psi ?? "",
+           degF: s.degF ?? i.degF ?? "" };
+}
+/* The designs on show: search text AND the duty filters. One definition, so
+   the list, the count and the CSV cannot disagree about what is showing. */
+function visibleDesigns() {
+  const words = DESIGN_SEARCH.toLowerCase().split(/\s+/).filter(Boolean);
+  const text = d => d.summary
+    ? `${d.summary.sizeKey ?? ""} ${d.summary.psi ?? ""} ${d.summary.degF ?? ""} ${d.summary.app ?? ""}`
+    : "";
+  const f = DESIGN_FILTER;
+  return DESIGN_ROWS.filter(d => {
+    const u = designDuty(d);
+    if (f.size && String(u.size) !== f.size) return false;
+    if (f.psi  && String(u.psi)  !== f.psi)  return false;
+    if (f.degF && String(u.degF) !== f.degF) return false;
+    const hay = `${d.name} ${d.client || ""} ${text(d)} ${d.notes || ""}`.toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
+}
+/* Options come off every saved design, not the filtered set, so choosing one
+   filter cannot empty the others. */
+function renderDesignFilters() {
+  const host = document.getElementById("designFilters");
+  if (!host) return;
+  const duties = DESIGN_ROWS.map(designDuty);
+  const uniq = k => [...new Set(duties.map(d => d[k]).filter(v => v !== "" && v != null))]
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric:true }));
+  const sel = (k, label, fmt) => `<select data-dfil="${k}" title="Filter by ${label}">`
+    + `<option value="">${label}: all</option>`
+    + uniq(k).map(v => `<option value="${esc(String(v))}"`
+        + `${String(DESIGN_FILTER[k]) === String(v) ? " selected" : ""}>${esc(fmt(v))}</option>`).join("")
+    + `</select>`;
+  host.innerHTML = sel("size", "Size", v => `${v} in`)
+                 + sel("psi",  "MAOP", v => `${f0(v)} psi`)
+                 + sel("degF", "Temp", v => `${f0(v)} °F`);
+}
+
 function renderDesignList() {
   const host = document.getElementById("designList");
   if (!host) return;
-  const words = DESIGN_SEARCH.toLowerCase().split(/\s+/).filter(Boolean);
-  const duty = d => d.summary
-    ? `${d.summary.sizeKey ?? ""} ${d.summary.psi ?? ""} ${d.summary.degF ?? ""} ${d.summary.app ?? ""}`
-    : "";
-  const rows = DESIGN_ROWS.filter(d => {
-    const hay = `${d.name} ${d.client || ""} ${duty(d)} ${d.notes || ""}`.toLowerCase();
-    return words.every(w => hay.includes(w));
-  });
+  renderDesignFilters();
+  const rows = visibleDesigns();
   const count = document.getElementById("designCount");
-  if (count) count.textContent = words.length
+  const filtered = rows.length !== DESIGN_ROWS.length;
+  if (count) count.textContent = filtered
     ? `${rows.length} of ${DESIGN_ROWS.length}` : `${DESIGN_ROWS.length} saved`;
   if (!DESIGN_ROWS.length) { host.innerHTML = `<p class="muted" style="margin:0">No saved designs yet.</p>`; return; }
-  if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">Nothing matches that.</p>`; return; }
+  if (!rows.length) { host.innerHTML = `<p class="muted" style="margin:0">Nothing matches that.</p>`;
+    renderCompare(); return; }
   host.innerHTML = tbl(["","",  "Name","Client",{t:"$/ft",n:1},{t:"lb/ft",n:1},{t:"Burst",n:1},"Updated",""],
       rows.map(d => {
         const h = healthOf(d);
@@ -1796,13 +1865,8 @@ function downloadCSV(name, text) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function exportDesignsCSV() {
-  const words = DESIGN_SEARCH.toLowerCase().split(/\s+/).filter(Boolean);
-  const duty = d => d.summary
-    ? `${d.summary.sizeKey ?? ""} ${d.summary.psi ?? ""} ${d.summary.degF ?? ""} ${d.summary.app ?? ""}` : "";
-  /* Whatever the search box is showing is what gets exported, so a filtered
-     list and its CSV cannot disagree. */
-  const rows = DESIGN_ROWS.filter(d =>
-    words.every(w => `${d.name} ${d.client || ""} ${duty(d)} ${d.notes || ""}`.toLowerCase().includes(w)));
+  /* Whatever the list is showing is what gets exported. */
+  const rows = visibleDesigns();
   const out = rows.map(d => {
     let r = null;
     try { r = d.inputs ? solve({ ...DEFAULTS, ...d.inputs, prices: PRICES }) : null; } catch (e) {}
@@ -2009,6 +2073,19 @@ document.addEventListener("change", e => {
 document.addEventListener("click", e => {
   if (!e.target.closest("#cmpClear")) return;
   COMPARE.clear(); renderDesignList();
+});
+document.addEventListener("change", e => {
+  const sf = e.target.closest("[data-sfil]");
+  if (sf) {
+    STD_FILTER[sf.dataset.sfil] = sf.value;
+    const host = document.getElementById("standardPane");
+    if (host) host.innerHTML = standardHTML();
+    return;
+  }
+  const f = e.target.closest("[data-dfil]");
+  if (!f) return;
+  DESIGN_FILTER[f.dataset.dfil] = f.value;
+  renderDesignList();
 });
 document.getElementById("newBtn").addEventListener("click", () => {
   CURRENT_DESIGN = null; BASELINE = null; showDirty();

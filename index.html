@@ -226,6 +226,11 @@ td.k{color:var(--ink2);width:1%;white-space:nowrap}
 .shr i{display:block;height:100%;background:var(--accent)}
 .shrcell b{font-weight:600;font-variant-numeric:tabular-nums}
 
+/* Duty filters. Compact, because three of them sit on a row that already
+   carries a search box and two buttons. */
+.filters{display:inline-flex;gap:4px;flex-wrap:wrap}
+.filters select{width:auto;padding:3px 6px;font-size:11.5px}
+
 /* A card header that folds its body away. Collapsed, the header carries the
    design that is open, so the box costs one line instead of a screenful once
    the saved list gets long. */
@@ -503,6 +508,7 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
         <div class="savebar" style="margin-top:2px">
           <input id="designSearch" type="search" placeholder="Search designs &mdash; name, client, duty or note"
             style="flex:1 1 260px">
+          <span id="designFilters" class="filters"></span>
           <span id="designCount" class="ref"></span>
           <button id="exportDesignsBtn" title="Download what the list is showing as a CSV for Excel">Export CSV</button>
           <button id="cmpClear" title="Clear the comparison ticks">Clear compare</button>
@@ -621,6 +627,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261016-0938"></script>
+<script type="module" src="app/ui.js?v=20261016-1147"></script>
 </body>
 </html>

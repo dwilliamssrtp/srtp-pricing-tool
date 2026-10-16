@@ -4,9 +4,9 @@
    Rendered into the Pricing page. Read-only for viewers and estimators,
    editable for admins, which is what the RLS policies allow.
    ===================================================================== */
-import * as DB from "./db.js?v=20261016-0938";
-import { ANSI_CLASSES } from "./parts.js?v=20261016-0938";
-import { PIPE_ORDER } from "./data.js?v=20261016-0938";
+import * as DB from "./db.js?v=20261016-1147";
+import { ANSI_CLASSES } from "./parts.js?v=20261016-1147";
+import { PIPE_ORDER } from "./data.js?v=20261016-1147";
 
 const PART_KIND_LABEL = {
   end_flange: "End flanges", lap_flange: "Lap flanges",
