@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261016-1151";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261016-1151";
-import * as DB from "./db.js?v=20261016-1151";
-import { initPages } from "./pages.js?v=20261016-1151";
-import * as PARTSUI from "./partsui.js?v=20261016-1151";
-import * as QUOTESUI from "./quotesui.js?v=20261016-1151";
-import * as MDS from "./mds.js?v=20261016-1151";
-import { optimise, designRules, SOFT } from "./optimise.js?v=20261016-1151";
+} from "./data.js?v=20261016-1219";
+import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261016-1219";
+import * as DB from "./db.js?v=20261016-1219";
+import { initPages } from "./pages.js?v=20261016-1219";
+import * as PARTSUI from "./partsui.js?v=20261016-1219";
+import * as QUOTESUI from "./quotesui.js?v=20261016-1219";
+import * as MDS from "./mds.js?v=20261016-1219";
+import { optimise, designRules, SOFT } from "./optimise.js?v=20261016-1219";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -81,7 +81,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261016-1151";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261016-1219";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -484,7 +484,10 @@ function standardHTML() {
     + `</select>`;
   const filters = `<span class="filters">`
     + sel("nom", "Size", v => v) + sel("psi", "MAOP", v => `${f0(v)} psi`)
-    + sel("degF", "Temp", v => `${f0(v)} °F`) + `</span>`;
+    + sel("degF", "Temp", v => `${f0(v)} °F`)
+    + `<button data-sclear${STD_FILTER.nom || STD_FILTER.psi || STD_FILTER.degF ? "" : " disabled"}`
+    + ` title="Show every standard duty again">Clear filters</button>`
+    + `</span>`;
   /* No card wrapper: this renders INSIDE the Designs card, next to the
      saved list, so another card would nest a panel in a panel. */
   return `
@@ -1801,9 +1804,15 @@ function renderDesignFilters() {
     + uniq(k).map(v => `<option value="${esc(String(v))}"`
         + `${String(DESIGN_FILTER[k]) === String(v) ? " selected" : ""}>${esc(fmt(v))}</option>`).join("")
     + `</select>`;
+  /* Named "Clear filters" rather than "Clear", because "Clear compare" sits
+     on the same row and the two undo different things. */
+  const anySet = !!(DESIGN_FILTER.size || DESIGN_FILTER.psi || DESIGN_FILTER.degF || DESIGN_SEARCH);
   host.innerHTML = sel("size", "Size", v => `${v} in`)
                  + sel("psi",  "MAOP", v => `${f0(v)} psi`)
-                 + sel("degF", "Temp", v => `${f0(v)} °F`);
+                 + sel("degF", "Temp", v => `${f0(v)} °F`)
+                 + `<button data-dclear${anySet ? "" : " disabled"}`
+                 + ` title="Clear the size, MAOP and temperature filters and the search box"`
+                 + `>Clear filters</button>`;
 }
 
 function renderDesignList() {
@@ -2076,6 +2085,23 @@ document.addEventListener("change", e => {
 document.addEventListener("click", e => {
   if (!e.target.closest("#cmpClear")) return;
   COMPARE.clear(); renderDesignList();
+});
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-dclear]")) {
+    /* The search box narrows the list exactly as the dropdowns do, so it is
+       part of what "clear the filters" means. */
+    DESIGN_FILTER = { size:"", psi:"", degF:"" };
+    DESIGN_SEARCH = "";
+    const box = document.getElementById("designSearch");
+    if (box) box.value = "";
+    renderDesignList();
+    return;
+  }
+  if (e.target.closest("[data-sclear]")) {
+    STD_FILTER = { nom:"", psi:"", degF:"" };
+    const host = document.getElementById("standardPane");
+    if (host) host.innerHTML = standardHTML();
+  }
 });
 document.addEventListener("change", e => {
   const sf = e.target.closest("[data-sfil]");
