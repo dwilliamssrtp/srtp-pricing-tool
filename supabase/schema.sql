@@ -320,6 +320,14 @@ alter table public.quote_lines
   add column if not exists days_override   integer,
   add column if not exists cost_overridden boolean not null default false;
 
+-- Which braider runs this pipe line. Braiders 1 and 2 lay one pass per run;
+-- braider 3 lays two at once, so a 3-pass design is 3 runs on 1 or 2 and 2
+-- runs on 3. Null means "not chosen", and the calculator then assumes braider
+-- 1, the slowest, rather than flattering the schedule.
+alter table public.quote_lines
+  add column if not exists braider smallint
+    check (braider is null or braider in (1, 2, 3));
+
 -- Manufacturing datasheets. A controlled document: the snapshot is frozen at
 -- save and the sheet prints from it, never from a live recompute, so an issued
 -- MDS keeps saying what it said after the design moves on.

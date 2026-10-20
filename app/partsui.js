@@ -4,9 +4,9 @@
    Rendered into the Pricing page. Read-only for viewers and estimators,
    editable for admins, which is what the RLS policies allow.
    ===================================================================== */
-import * as DB from "./db.js?v=20261016-1219";
-import { ANSI_CLASSES } from "./parts.js?v=20261016-1219";
-import { PIPE_ORDER } from "./data.js?v=20261016-1219";
+import * as DB from "./db.js?v=20261020-1121";
+import { ANSI_CLASSES } from "./parts.js?v=20261020-1121";
+import { PIPE_ORDER } from "./data.js?v=20261020-1121";
 
 const PART_KIND_LABEL = {
   end_flange: "End flanges", lap_flange: "Lap flanges",
@@ -126,26 +126,39 @@ export function speedsSection() {
   for (const size of Object.keys(bySize).sort((a, b) => sizeRank(a) - sizeRank(b))) {
     rows.push({ group: `${size} in pipe` });
     for (const s of bySize[size]) {
+      /* Per RUN. How many runs the braider needs is the quoted design's pass
+         count, divided by what the chosen braider lays at once, so it is not
+         a property of this table any more. */
       const rate = s.ft_per_min == null ? null
-        : s.ft_per_min * 60 * 24 * (1 / (s.passes || 1)) * (s.efficiency ?? 0.8) * (s.braider_mult ?? 1);
+        : s.ft_per_min * 60 * 24 * (s.efficiency ?? 0.8) * (s.braider_mult ?? 1);
       rows.push({ cells: [
         s.stage,
         num(s, "ft_per_min", 0.1),
-        num(s, "passes", 1, 58),
         num(s, "efficiency", 0.05),
         num(s, "braider_mult", 1, 58),
         { v: rate == null ? `<span class="wn">rate missing</span>` : f0(rate) + " ft/day",
-          n: 1, raw: rate == null }
+          n: 1, raw: rate == null },
+        { v: String(s.stage).toLowerCase().startsWith("braid")
+             ? `<span class="ref">÷ braid runs</span>` : `<span class="ref">one run</span>`,
+          raw: true }
       ]});
     }
   }
   return `<h4>Line speeds &mdash; labour calculator</h4>`
-    + tbl(["Stage", { t: "ft/min", n: 1 }, { t: "Passes", n: 1 }, { t: "Efficiency", n: 1 },
-           { t: "Braider ×", n: 1 }, { t: "Day rate at 24 hr", n: 1 }], rows)
-    + `<p class="ref">Day rate = ft/min &times; 60 &times; 24 &times; (1 / passes) &times; efficiency
-       &times; braider multiplier, then scaled by hours per day. Days for a run is the <b>longest</b>
-       stage, not the sum, because the stages run on separate lines. Endeco used 2.8 / 5 / 10 ft-min at
-       0.8 on both its runs, so that is seeded for every size &mdash; correct it where you have real data.</p>`;
+    + tbl(["Stage", { t: "ft/min", n: 1 }, { t: "Efficiency", n: 1 },
+           { t: "Braider ×", n: 1 }, { t: "Day rate per run at 24 hr", n: 1 }, "Runs"], rows)
+    + `<p class="ref">Day rate per run = ft/min &times; 60 &times; 24 &times; efficiency
+       &times; braider multiplier, then scaled by hours per day. Days for a job is the <b>longest</b>
+       stage, not the sum, because the stages run on separate lines.</p>`
+    + `<p class="ref">A <b>pass</b> is going over the same section again, and only the braider does
+       it &mdash; the base tube and the cover are extruded once however many times the braid is laid.
+       So the braid stage is divided by its number of runs and the other two are not. The runs come
+       from the quoted design's pass count and the braider chosen on that quote line:
+       braiders 1 and 2 lay one pass per run, braider 3 lays two, so a 3-pass design is 3 runs on
+       braider 1 or 2 and 2 runs on braider 3. There is no passes column here any more, because
+       passes describe the design rather than the line.</p>`
+    + `<p class="ref">Endeco used 2.8 / 5 / 10 ft-min at 0.8 on both its runs, so that is seeded for
+       every size &mdash; correct it where you have real data.</p>`;
 }
 
 /* ---------------------------------------------------------- settings */

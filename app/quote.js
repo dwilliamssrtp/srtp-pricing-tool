@@ -15,7 +15,7 @@
    not 50%. That is the workbook's intent, not a rounding error.
    ===================================================================== */
 
-import { labourDays } from "./parts.js?v=20261016-1219";
+import { labourDays } from "./parts.js?v=20261020-1121";
 
 const n = v => (v === null || v === undefined || Number.isNaN(Number(v)) ? 0 : Number(v));
 
@@ -34,7 +34,7 @@ export function lineTotals(line, scrapPct) {
 }
 
 /* A pipe size and its flange / splice / reel lines. */
-export function groupTotals(lines, settings, labourStages) {
+export function groupTotals(lines, settings, labourStages, labourOpts = {}) {
   const rows = lines.map(l => lineTotals(l, settings.scrapPct));
   const pipe = rows.find(r => r.kind === "pipe") || null;
 
@@ -47,7 +47,11 @@ export function groupTotals(lines, settings, labourStages) {
       manufacturedFt: pipe.manufactured,
       stages: labourStages,
       hoursPerDay: settings.hoursPerDay,
-      buffer: settings.daysBuffer
+      buffer: settings.daysBuffer,
+      /* Passes belong to the DESIGN being quoted, not to the line speed
+         table; the braider is chosen per pipe line, defaulting to 1. */
+      braidPasses: labourOpts.braidPasses ?? 1,
+      braider: pipe.braider ?? 1
     });
   }
   // A typed day count wins over the calculator, so a schedule can be tested
@@ -70,7 +74,7 @@ export function groupTotals(lines, settings, labourStages) {
 }
 
 /* The whole quote. `lines` is every row; groups are split on group_no. */
-export function quoteTotals(lines, settings, stagesByGroup = {}) {
+export function quoteTotals(lines, settings, stagesByGroup = {}, optsByGroup = {}) {
   const byGroup = new Map();
   for (const l of lines) {
     const g = l.group_no ?? 1;
@@ -81,7 +85,8 @@ export function quoteTotals(lines, settings, stagesByGroup = {}) {
     .sort((a, b) => a[0] - b[0])
     .map(([no, ls]) => ({
       groupNo: no,
-      ...groupTotals(ls.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), settings, stagesByGroup[no])
+      ...groupTotals(ls.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), settings,
+                     stagesByGroup[no], optsByGroup[no] || {})
     }));
 
   const extended = groups.reduce((s, g) => s + g.extended, 0);

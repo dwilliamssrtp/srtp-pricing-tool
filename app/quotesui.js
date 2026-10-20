@@ -8,10 +8,10 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261016-1219";
-import { solve } from "./engine.js?v=20261016-1219";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES } from "./parts.js?v=20261016-1219";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261016-1219";
+import * as DB from "./db.js?v=20261020-1121";
+import { solve } from "./engine.js?v=20261020-1121";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES, BRAIDERS } from "./parts.js?v=20261020-1121";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261020-1121";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -279,14 +279,17 @@ function editorPage() {
   const { tbl, esc, money, f0, f } = H;
   const q = CUR;
   const st = quoteSettings(q);
-  const stagesByGroup = {};
+  const stagesByGroup = {}, optsByGroup = {};
   for (const l of q.lines) {
     if (l.kind !== "pipe") continue;
     const d = DESIGNS.find(x => x.id === l.design_id);
     const size = d ? String(d.summary?.sizeKey || "").replace(/\s*(DH|LPG)$/, "") : null;
     stagesByGroup[l.group_no] = size ? stagesFor(size) : [];
+    /* How many times the braider goes over the pipe is the design's own pass
+       count, so the schedule follows the design being quoted. */
+    optsByGroup[l.group_no] = { braidPasses: d?.inputs?.passes ?? 1 };
   }
-  const T = quoteTotals(q.lines, st, stagesByGroup);
+  const T = quoteTotals(q.lines, st, stagesByGroup, optsByGroup);
 
   const head = `
     <div class="savebar">
@@ -400,6 +403,19 @@ function editorPage() {
         value="${pipeLine && pipeLine.days_override != null ? pipeLine.days_override : ""}"
         placeholder="${lab && lab.totalDays != null ? lab.totalDays : "auto"}"
         title="Blank uses the labour calculator" style="width:72px;text-align:right">`;
+    /* Which braider runs this pipe. Braiders 1 and 2 lay one pass per run,
+       braider 3 lays two, so the same design takes fewer runs on 3. */
+    const braiderBox = `<select class="qbraider" data-g="${g.groupNo}"
+        title="Braider 3 lays two passes at once, so it needs fewer runs"
+        style="width:auto">`
+      + BRAIDERS.map(b => `<option value="${b.id}"`
+          + `${Number(pipeLine?.braider ?? 1) === b.id ? " selected" : ""}>`
+          + `${esc(b.label)}${b.passesPerRun > 1 ? ` (${b.passesPerRun} passes/run)` : ""}</option>`).join("")
+      + `</select>`;
+    const runTxt = lab && lab.braidRuns
+      ? `${braiderBox} &middot; ${lab.braidPasses} pass${lab.braidPasses === 1 ? "" : "es"}
+         = <b>${lab.braidRuns}</b> braid run${lab.braidRuns === 1 ? "" : "s"} &middot; `
+      : `${braiderBox} &middot; `;
     const labTxt = !lab ? `Days ${daysBox}` : lab.missing.length
       ? `<span class="wn">line speeds missing for ${esc(lab.missing.join(", "))}</span> &middot; days ${daysBox}`
       : `${f(lab.longestDays,2)} days on the longest stage &rarr; calculator says
@@ -409,7 +425,7 @@ function editorPage() {
     return `<h4>Group ${g.groupNo} <button data-rmg="${g.groupNo}" title="Remove">×</button></h4>`
       + tbl(["Line",{t:"Supplied",n:1},{t:"Manufactured",n:1},{t:"Unit price",n:1},
              {t:"Extended",n:1},{t:"Unit cost",n:1},{t:"Budget",n:1},{t:"Margin",n:1}], rows)
-      + `<p class="ref">${labTxt} &middot; group total ${money(g.extended,0)},
+      + `<p class="ref">${runTxt}${labTxt} &middot; group total ${money(g.extended,0)},
          budget ${money(g.budget,0)}, margin ${g.margin==null?"—":(g.margin*100).toFixed(1)+"%"},
          true margin ${g.trueMargin==null?"—":(g.trueMargin*100).toFixed(1)+"%"}</p>`
       + `<div class="savebar">
@@ -722,6 +738,7 @@ const stripLine = l => ({
   unit_price: l.unit_price ?? null, unit_cost: l.unit_cost ?? null,
   unit: l.unit || "ea", cost_is_placeholder: !!l.cost_is_placeholder,
   days_override: l.days_override == null ? null : Number(l.days_override),
+  braider: l.braider == null ? null : Number(l.braider),
   cost_overridden: !!l.cost_overridden
 });
 
@@ -737,6 +754,7 @@ document.addEventListener("change", async e => {
   const box    = e.target.closest(".qln");
   const margin = e.target.closest(".qmargin");
   const days   = e.target.closest(".qdays");
+  const braid  = e.target.closest(".qbraider");
   const qs     = e.target.closest(".qset2");
 
   const lineAt = (g, s) =>
@@ -785,6 +803,16 @@ document.addEventListener("change", async e => {
     const pipe = CUR.lines.find(l => Number(l.group_no) === Number(days.dataset.g) && l.kind === "pipe");
     if (!pipe) return;
     pipe.days_override = days.value === "" ? null : Number(days.value);
+    H.refresh();
+    return;
+  }
+
+  if (braid) {
+    /* On the pipe line, like the days override: it is a fact about how this
+       job will be run, not about the cost sheet everyone else quotes from. */
+    const pipe = CUR.lines.find(l => Number(l.group_no) === Number(braid.dataset.g) && l.kind === "pipe");
+    if (!pipe) return;
+    pipe.braider = Number(braid.value) || 1;
     H.refresh();
     return;
   }

@@ -59,27 +59,56 @@ export function partsForPipe({ rtpSize, psi, connectionMaterial, sealing }) {
   };
 }
 
+/* The braiders on the floor. 1 and 2 carry one pass per run; 3 carries two
+   at once, so it does a 3-pass design in two runs rather than three. */
+export const BRAIDERS = [
+  { id:1, label:"Braider 1", passesPerRun:1 },
+  { id:2, label:"Braider 2", passesPerRun:1 },
+  { id:3, label:"Braider 3", passesPerRun:2 }
+];
+export const braiderById = id =>
+  BRAIDERS.find(b => b.id === Number(id)) || BRAIDERS[0];
+
 /* ---------------------------------------------------------------------
    Labour calculator, from the Profitability Review's stage tables.
-     day rate ft = ft/min * 60 * 24 * (1/passes) * efficiency
+     day rate ft = ft/min * 60 * 24 * (1/runs) * efficiency
                    * braider multiplier * (hours per day / 24)
      days        = manufactured units / day rate
+
+   A "pass" is going over the same section again, and only the BRAIDER
+   does that - the base tube and the cover are extruded once however many
+   times the braid is laid. So runs is the design's pass count on the
+   braider row and 1 everywhere else, and the per-row passes column no
+   longer enters: it described the design, not the line.
+
+   Which braider runs the job decides how many runs those passes take,
+   because braider 3 lays two passes at once: 3 passes is 3 runs on
+   braider 1 or 2 and 2 runs on braider 3.
+
    Total is the LONGEST stage plus a buffer, not the sum: the stages run
    on separate lines, so they overlap.
    --------------------------------------------------------------------- */
-export function labourDays({ manufacturedFt, stages, hoursPerDay = 24, buffer = 2 }) {
+export function labourDays({ manufacturedFt, stages, hoursPerDay = 24, buffer = 2,
+                             braidPasses = 1, braider = 1 }) {
+  const perRun = braiderById(braider).passesPerRun;
   const rows = stages.map(s => {
+    const isBraid = String(s.stage).toLowerCase().startsWith("braid");
+    const runs = isBraid
+      ? Math.max(1, Math.ceil((Number(braidPasses) || 1) / perRun))
+      : 1;
     const rate = (s.ft_per_min === null || s.ft_per_min === undefined)
       ? null
-      : s.ft_per_min * 60 * 24 * (1 / (s.passes || 1)) * (s.efficiency ?? 0.8)
+      : s.ft_per_min * 60 * 24 * (1 / runs) * (s.efficiency ?? 0.8)
         * (s.braider_mult ?? 1) * (hoursPerDay / 24);
-    return { ...s, dayRateFt: rate, days: rate ? manufacturedFt / rate : null };
+    return { ...s, runs, isBraid, dayRateFt: rate,
+             days: rate ? manufacturedFt / rate : null };
   });
   const known = rows.filter(r => r.days !== null).map(r => r.days);
   const missing = rows.filter(r => r.days === null).map(r => r.stage);
   const longest = known.length ? Math.max(...known) : null;
   return {
-    rows, missing,
+    rows, missing, braidPasses: Number(braidPasses) || 1,
+    braider: braiderById(braider), braidRuns: rows.find(r => r.isBraid)?.runs ?? null,
     longestDays: longest,
     totalDays: longest === null ? null : Math.ceil(longest - 1e-9) + buffer
   };
