@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode
-} from "./data.js?v=20261020-1121";
+} from "./data.js?v=20261020-1547";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -422,6 +422,10 @@ export function solve(inp) {
 /* =====================================================================
    solveSpool(s) — Spool Calculator sheet, deliberately standalone.
    ===================================================================== */
+/* Spool Calculator minimum bend ratio, from the sheet's own conditional
+   format on D10. Not the same as the 20D reel-selection rule. */
+export const SPOOL_MIN_D = 23.5;
+
 export function solveSpool(s) {
   const r = {}, warn = [];
   const P = SPOOL_PIPE[s.sizeKey] || {};
@@ -464,7 +468,12 @@ export function solveSpool(s) {
   r.burstKN      = r.psi * 2.19;                                          // AE12
   r.hydro        = r.psi * 1.25;                                          // AD8
 
-  if (r.minD && r.minD < 20) warn.push(`Hub/OD ratio is ${r.minD.toFixed(1)}D — below the ≥20D minimum bend.`);
+  /* The Spool Calculator's own limit is 23.5D, which is what the sheet's
+     conditional format on D10 tests: below 23.5 red, above it green. That is
+     stricter than the 20D used for reel selection elsewhere, and deliberately
+     so - this is the number the sheet colours. */
+  if (r.minD && r.minD < SPOOL_MIN_D)
+    warn.push(`Hub/OD ratio is ${r.minD.toFixed(1)}D — below the ${SPOOL_MIN_D}D the Spool Calculator requires.`);
   if (r.capacity < r.lengthFt) warn.push(`One reel holds ${Math.round(r.capacity).toLocaleString()} ft — the ${r.lengthFt.toLocaleString()} ft order needs ${r.nReels} reels.`);
   r.warnings = warn;
   return r;

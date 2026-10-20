@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261020-1121";
-import { solve, solveSpool, matKey, reelFit } from "./engine.js?v=20261020-1121";
-import * as DB from "./db.js?v=20261020-1121";
-import { initPages } from "./pages.js?v=20261020-1121";
-import * as PARTSUI from "./partsui.js?v=20261020-1121";
-import * as QUOTESUI from "./quotesui.js?v=20261020-1121";
-import * as MDS from "./mds.js?v=20261020-1121";
-import { optimise, designRules, SOFT } from "./optimise.js?v=20261020-1121";
+} from "./data.js?v=20261020-1547";
+import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D } from "./engine.js?v=20261020-1547";
+import * as DB from "./db.js?v=20261020-1547";
+import { initPages } from "./pages.js?v=20261020-1547";
+import * as PARTSUI from "./partsui.js?v=20261020-1547";
+import * as QUOTESUI from "./quotesui.js?v=20261020-1547";
+import * as MDS from "./mds.js?v=20261020-1547";
+import { optimise, designRules, SOFT } from "./optimise.js?v=20261020-1547";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -81,7 +81,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261020-1121";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261020-1547";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -128,7 +128,7 @@ const DEFAULTS = {
   priceBookId:null
 };
 const SPOOL_DEFAULTS = {
-  sizeKey:"4.5", psi:3000, lengthFt:25500, sp:144, hub:120, t:92,
+  sizeKey:"4.5", psi:500, lengthFt:25500, sp:144, hub:108, t:80,
   wtPerFt:4.36, packing:0.886973
 };
 let I = { ...DEFAULTS }, S = { ...SPOOL_DEFAULTS }, R = null, SR = null, TAB = "TDS";
@@ -1343,16 +1343,27 @@ function renderSpoolGrid() {
     sfield("Spool flange OD &mdash; SP","sp","select",{opts:SPOOL_SP,unit:"in"}),
     sfield("Hub diameter &mdash; HD","hub","select",{opts:SPOOL_HUB,unit:"in"}),
     sfield("Traverse &mdash; T","t","select",{opts:SPOOL_T,unit:"in"}),
-    `<label>Min D (HD / OD)</label><div class="derived" id="d_sminD">${f(r.minD,2)}D</div><div class="u">≥20D</div>`,
+    `<label>Min D (HD / OD)</label><div class="derived ${spoolDClass(r.minD)}" id="d_sminD">${f(r.minD,2)}D</div><div class="u">≥${SPOOL_MIN_D}D</div>`,
     `<div class="grp">Factors</div>`,
     sfield("Pipe weight per foot","wtPerFt","num",{step:0.01,unit:"lbs/ft"}),
     sfield("Packing efficiency","packing","num",{step:0.001,unit:"frac"})
   ].join("");
 }
 
+/* The sheet colours D10 from one rule: below 23.5 red, above it green, and
+   exactly 23.5 neither. Mirrored rather than rounded to >= so the tool says
+   the same thing the sheet does on the boundary. */
+function spoolDClass(d) {
+  if (!d) return "";
+  return d < SPOOL_MIN_D ? "bad" : d > SPOOL_MIN_D ? "ok" : "";
+}
+
 function updateSpoolDerived(r) {
   const v = { d_sod:f3(r.od), d_sid:f3(r.id), d_slenM:f0(r.lengthM), d_sminD:f(r.minD,2)+"D" };
   for (const id in v) { const e = document.getElementById(id); if (e) e.textContent = v[id]; }
+  /* Rebuilt in place, because the grid is not re-rendered on a spool edit. */
+  const md = document.getElementById("d_sminD");
+  if (md) md.className = "derived " + spoolDClass(r.minD);
 }
 
 function renderSpoolOutputs(r) {
@@ -1363,7 +1374,8 @@ function renderSpoolOutputs(r) {
     { k:"With packing "+pct(r.packing), v:f0(r.derated)+" ft", s:f0(r.deratedM)+" m" },
     { k:"Reels for the order", v:f0(r.nReels), s:f0(r.lengthFt)+" ft order" },
     { k:"Spool weight", v:f0(r.spoolWeight)+" lbs", s:f0(r.spoolWeight/2.2)+" kg" },
-    { k:"Min bend ratio", v:f(r.minD,1)+"D", cls:r.minD>=20?"ok":"bad", s:"hub / pipe OD" },
+    { k:"Min bend ratio", v:f(r.minD,1)+"D", cls:spoolDClass(r.minD),
+      s:`hub / pipe OD · needs ${SPOOL_MIN_D}D` },
     { k:"Hydro (MAOP×1.25)", v:f0(r.hydro)+" psi", s:"AD8" },
     { k:"Burst, Technora", v:f0(r.burstTN)+" psi", s:"MAOP × 1.84" },
     { k:"Burst, Twaron", v:f0(r.burstKN)+" psi", s:"MAOP × 2.19" }
