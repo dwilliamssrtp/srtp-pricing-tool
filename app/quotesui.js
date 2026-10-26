@@ -8,10 +8,11 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261020-1547";
-import { solve } from "./engine.js?v=20261020-1547";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES, BRAIDERS } from "./parts.js?v=20261020-1547";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261020-1547";
+import * as DB from "./db.js?v=20261026-1537";
+import { solve, reelFit } from "./engine.js?v=20261026-1537";
+import { REEL_T } from "./data.js?v=20261026-1537";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES, BRAIDERS } from "./parts.js?v=20261026-1537";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261026-1537";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -156,9 +157,27 @@ export function groupFromDesign(design, { groupNo, suppliedFt, connectionMateria
     lines.push({ group_no: groupNo, sort: 3, kind: "splice", label: p.splice,
                  ...priced(splPart, reels, "ea") });
   }
-  lines.push({ group_no: groupNo, sort: 4, kind: "reel",
-               label: `Reel ${reelCode} (${H.f0(capacity)} ft per reel)`,
-               ...priced(reelPart, reels, "ea") });
+  /* The same reel is stocked in two traverse lengths, so both go on the quote
+     and whichever is not used gets deleted - the rows are removable. Only the
+     variants the cost sheet actually carries are offered, and the design's own
+     traverse leads. */
+  const reelVariants = [];
+  for (const t of [inputs.reelT, ...REEL_T.filter(x => x !== inputs.reelT)]) {
+    const code = `SP${inputs.reelSP}-HD${inputs.reelHub}-T${t}`;
+    const part = look("reel", { reelCode: code });
+    if (!part) continue;                       // not a reel the cost sheet knows
+    const fit = reelFit(r.jacketOD, inputs.reelSP, inputs.reelHub, t);
+    if (!fit.ok) continue;                     // under the bend minimum
+    const cap = Math.round(fit.capacity || 0);
+    reelVariants.push({ code, part, cap, n: cap ? Math.ceil(suppliedFt / cap) : 0 });
+  }
+  if (!reelVariants.length)
+    reelVariants.push({ code: reelCode, part: reelPart, cap: Math.round(capacity), n: reels });
+  reelVariants.forEach((v, i) => {
+    lines.push({ group_no: groupNo, sort: 4 + i, kind: "reel",
+                 label: `Reel ${v.code} (${H.f0(v.cap)} ft per reel)`,
+                 ...priced(v.part, v.n, "ea") });
+  });
 
   return { lines, capacity, reels, parts: p, solved: r };
 }

@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261020-1547";
-import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D } from "./engine.js?v=20261020-1547";
-import * as DB from "./db.js?v=20261020-1547";
-import { initPages } from "./pages.js?v=20261020-1547";
-import * as PARTSUI from "./partsui.js?v=20261020-1547";
-import * as QUOTESUI from "./quotesui.js?v=20261020-1547";
-import * as MDS from "./mds.js?v=20261020-1547";
-import { optimise, designRules, SOFT } from "./optimise.js?v=20261020-1547";
+} from "./data.js?v=20261026-1537";
+import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D, MIN_BEND_D } from "./engine.js?v=20261026-1537";
+import * as DB from "./db.js?v=20261026-1537";
+import { initPages } from "./pages.js?v=20261026-1537";
+import * as PARTSUI from "./partsui.js?v=20261026-1537";
+import * as QUOTESUI from "./quotesui.js?v=20261026-1537";
+import * as MDS from "./mds.js?v=20261026-1537";
+import { optimise, designRules, SOFT } from "./optimise.js?v=20261026-1537";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -81,7 +81,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261020-1547";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261026-1537";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -260,7 +260,7 @@ function renderReels(r) {
     const mark  = k.cur ? "●" : (k.ok ? "✓" : "✗");
     const right = k.ok
       ? `${f0(k.capacity)} ft${k.reels ? " · " + k.reels + " reel" + (k.reels > 1 ? "s" : "") : ""}`
-      : `${f(k.bendD, 1)}D &lt; 20D`;
+      : `${f(k.bendD, 1)}D &lt; ${MIN_BEND_D}D`;
     return `<div class="row ${state}" data-reel="${k.sp}:${k.hub}:${k.t}"
               title="${k.ok ? "Bend " + f(k.bendD,1) + "D" : "Bend radius too tight for this pipe"}">`
          + `<span class="mk">${mark}</span><span>${esc(k.code.replace(/-/g, " / "))}</span>`
@@ -268,7 +268,7 @@ function renderReels(r) {
   }).join("")
     + (best ? `<p class="fin">Most on one reel: <b>${esc(best.code.replace(/-/g," / "))}</b>, `
             + `${f0(best.capacity)} ft.</p>`
-            : `<p class="fin">No reel meets the 20D minimum bend for this pipe.</p>`);
+            : `<p class="fin">No reel meets the ${MIN_BEND_D}D minimum bend for this pipe — <b>it cannot be reeled</b>.</p>`);
 }
 
 function renderInputs() {
@@ -460,7 +460,7 @@ function standardHTML() {
       { v: (d.reels || []).map(rl =>
           `<span class="reelopt${rl.ok ? "" : " bad"}" title="${esc(rl.label)} `
           + `· SP${rl.sp} HD${rl.hub} T${rl.t} · hub/OD ${f(rl.bendD,1)}D`
-          + `${rl.ok ? "" : " — under the 20D bend minimum, so this reel cannot be wound"}">`
+          + `${rl.ok ? "" : " — under the bend minimum, so this reel cannot be wound"}">`
           + `${esc(rl.label)} <b>${f0(rl.ft)} ft</b>`
           /* The footage is still shown when the bend rule fails, because the
              number is what says how close the reel is to usable - "no" alone
@@ -508,7 +508,7 @@ function standardHTML() {
       Reels: 2&quot; on 8 ft (SP96&middot;HD68&middot;T56) with a 12 ft
       (SP144&middot;HD108&middot;T80) option; 3&quot; and 4&quot; on 12 ft;
       5&quot; and 6&quot; on 14.5 ft only &mdash; foreign (SP174&middot;HD148&middot;T80)
-      or domestic (SP174&middot;HD148&middot;T92). A reel reading <b>no</b> is under the 20D
+      or domestic (SP174&middot;HD148&middot;T92). A reel reading <b>no</b> is under the
       bend minimum for that pipe.</p>`;
 }
 
@@ -577,7 +577,7 @@ function exportStandardCSV() {
       r ? String(r.inputs.longs).replace(/ \(.*/, "") : "", r ? r.inputs.longsQty : "",
       r ? r.costPerFt.toFixed(4) : "", r ? Math.round(r.burst) : "",
       (d.reels || []).map(rl => `${rl.label} SP${rl.sp}/HD${rl.hub}/T${rl.t}: `
-        + (rl.ok ? rl.ft + " ft" : "under 20D bend")).join(" | "),
+        + (rl.ok ? rl.ft + " ft" : "under the bend minimum")).join(" | "),
       d.err ? "error" : !r ? "nothing configures" : !d.clean ? "short" : d.warnings.length ? "allowed" : "ok",
       d.err || (!d.clean ? d.blockers.join("; ") : d.warnings.join("; "))];
   });
@@ -683,8 +683,8 @@ function renderDisplay() {
       vd(r.longsQty<=r.maxLongs?"Fits":"Over", r.longsQty<=r.maxLongs), {v:"G106",cls:"ref"}],
     ["Pitch vs minimum", {v:`${f(r.pitch)}" / ${f(r.minPitch)}"`,n:1},
       vd(r.pitch>=r.minPitch?"OK":"Too tight", r.pitch>=r.minPitch), {v:"F82",cls:"ref"}],
-    ["Reel min bend ratio (≥20D)", {v:f(r.minD,1)+"D",n:1},
-      vd(r.minD>=20?"OK":"Too tight", r.minD>=20), {v:"G27",cls:"ref"}],
+    [`Reel min bend ratio (≥${MIN_BEND_D}D)`, {v:f(r.minD,1)+"D",n:1},
+      vd(r.minD>=MIN_BEND_D?"OK":"Too tight", r.minD>=MIN_BEND_D), {v:"G27",cls:"ref"}],
     ["Coupling pressure rating", {v:f0(r.couplingMaxP)+" psi",n:1},
       vd(r.psi<=r.couplingMaxP?"OK":"Exceeded", r.psi<=r.couplingMaxP), {v:"B12",cls:"ref"}]
   ]);
@@ -2356,6 +2356,12 @@ document.addEventListener("change", e => {
 document.addEventListener("click", e => {
   const pick = e.target.closest("[data-reel]");
   if (pick) {
+    /* A reel under the bend minimum is not a choice - picking it here is how
+       a 4.5in design ended up saved on a 108 hub and quoted that way. */
+    if (pick.classList.contains("fail")) {
+      setStatus(`That reel is under the ${MIN_BEND_D}D bend minimum for this pipe.`, true);
+      return;
+    }
     const [sp, hub, t] = pick.dataset.reel.split(":").map(Number);
     Object.assign(I, { reelSP: sp, reelHub: hub, reelT: t });
     recalc({ rebuild: true });

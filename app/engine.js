@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode
-} from "./data.js?v=20261020-1547";
+} from "./data.js?v=20261026-1537";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -56,13 +56,16 @@ export function reelWraps(jacketOD, hub, traverse) {
 }
 
 /* Feet of finished pipe one reel holds, and whether it is legal to wind on
-   it: hub / pipe OD must be at least 20D (the Reels sheet minimum bend). */
+   it: hub / pipe OD must be at least MIN_BEND_D. The Reels sheet heads its
+   blocks with 20D, but the Spool Calculator's own rule is 23.5D and that is
+   the one that governs: at 20D a 4.5in pipe passes on a 108 hub at 23.2D,
+   which is not a reel we wind it on. */
 export function reelFit(jacketOD, sp, hub, traverse) {
   const wraps = reelWraps(jacketOD, hub, traverse);
   const capacity = wraps.length
     ? vlookupApprox(sp, wraps.map(w => [w.odTotal, w.lenFt])) : 0;
   const bendD = jacketOD ? hub / jacketOD : 0;
-  return { capacity: capacity || 0, bendD, ok: bendD >= 20 };
+  return { capacity: capacity || 0, bendD, ok: bendD >= MIN_BEND_D };
 }
 
 export const requiredYarnType = degC => degC <= 65 ? "Twaron (KN)" : "Technora (TN)";
@@ -399,8 +402,8 @@ export function solve(inp) {
   o.reelWeight   = o.lenFinished * o.weightPerFt;                            // F39
   o.minD         = o.jacketOD ? o.reelHub / o.jacketOD : 0;                  // G27
   o.nReels       = o.lenBraid ? rUp(o.lengthFt / o.lenBraid, 0) : 0;          // WO!C18
-  if (o.minD && o.minD < 20)
-    warn.push(`Reel hub/OD ratio is ${o.minD.toFixed(1)}D — below the ≥20D minimum bend on the Reels sheet.`);
+  if (o.minD && o.minD < MIN_BEND_D)
+    warn.push(`Reel hub/OD ratio is ${o.minD.toFixed(1)}D — below the ≥${MIN_BEND_D}D minimum bend.`);
 
   /* ---------------- 16. CDS derived (CDS!E16:E26) ------------------- */
   o.minBendFt = 30 * o.jacketOD / 12;                                   // E20
@@ -422,9 +425,11 @@ export function solve(inp) {
 /* =====================================================================
    solveSpool(s) — Spool Calculator sheet, deliberately standalone.
    ===================================================================== */
-/* Spool Calculator minimum bend ratio, from the sheet's own conditional
-   format on D10. Not the same as the 20D reel-selection rule. */
-export const SPOOL_MIN_D = 23.5;
+/* Minimum hub/OD bend ratio, from the Spool Calculator's conditional format
+   on D10. One number for the whole tool: reel selection, the reel checklist
+   and the Spool Calculator all answer to it. */
+export const MIN_BEND_D = 23.5;
+export const SPOOL_MIN_D = MIN_BEND_D;
 
 export function solveSpool(s) {
   const r = {}, warn = [];

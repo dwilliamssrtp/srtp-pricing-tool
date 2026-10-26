@@ -176,7 +176,7 @@ const API_NOMINAL = [
 const REEL_SP  = [42,54,60,96,124,144,174,191];
 const REEL_HUB = [30,40,42,43,60,68,72,76,80,84,88,92,96,100,104,108,112,116,120,
                   140,144,148,152,156,158,159,160,172,176,180];
-const REEL_T   = [44.5,48,56,80,92];
+const REEL_T   = [44.5,48,56,80,90,92];
 
 /* The reels actually owned, as SP / HD / T. The master cost sheet carries a
    priced row for each under the same code, so a reel picked here can always
