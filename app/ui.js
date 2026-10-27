@@ -5,14 +5,14 @@ import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261026-1537";
-import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D, MIN_BEND_D } from "./engine.js?v=20261026-1537";
-import * as DB from "./db.js?v=20261026-1537";
-import { initPages } from "./pages.js?v=20261026-1537";
-import * as PARTSUI from "./partsui.js?v=20261026-1537";
-import * as QUOTESUI from "./quotesui.js?v=20261026-1537";
-import * as MDS from "./mds.js?v=20261026-1537";
-import { optimise, designRules, SOFT } from "./optimise.js?v=20261026-1537";
+} from "./data.js?v=20261027-1515";
+import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D, MIN_BEND_D } from "./engine.js?v=20261027-1515";
+import * as DB from "./db.js?v=20261027-1515";
+import { initPages } from "./pages.js?v=20261027-1515";
+import * as PARTSUI from "./partsui.js?v=20261027-1515";
+import * as QUOTESUI from "./quotesui.js?v=20261027-1515";
+import * as MDS from "./mds.js?v=20261027-1515";
+import { optimise, designRules, SOFT } from "./optimise.js?v=20261027-1515";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -81,7 +81,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261026-1537";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261027-1515";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -364,6 +364,13 @@ const STD_SIZES = [
     reels:[REEL_12] },
   { nom:'4"', design:"4.5",   tableID:4.0, psis:[300,500,750,1500,2250],
     reels:[REEL_12] },
+  /* The 4.0 in design pipe, which is a product in its own right and not the
+     4 in nominal above - that one is built on 4.5 in pipe. Same pressures and
+     temperatures as the 4 in nominal, since the product table does not list
+     this pipe separately. Its 4.15 in OD clears the 12 ft reel at 26.0D,
+     where the 4.5 in pipe does not. */
+  { nom:'4.0 in pipe', design:"4", tableID:3.42, title:'4.0 in design pipe — not the 4" nominal',
+    psis:[300,500,750,1500,2250], reels:[REEL_12] },
   /* 5in and 6in ship on the 14.5 ft reels only. The 12 ft was dropped
      because its HD108 hub is 17.3D against the 6.23in pipe and 15.9D
      against the 6.8in, both under the 20D bend minimum. */
@@ -439,8 +446,8 @@ function standardHTML() {
       /* Counted off what is on show, not off the product table, or the
          header would still claim 7 pressures under a filter showing one. */
       const n = shown.filter(x => x.nom === d.nom).length;
-      rows.push({ group: `${d.nom} nominal — ${d.design} in design pipe `
-        + `· ${n} dut${n === 1 ? "y" : "ies"}` });
+      rows.push({ group: (d.title || `${d.nom} nominal — ${d.design} in design pipe`)
+        + ` · ${n} dut${n === 1 ? "y" : "ies"}` });
     }
     const r = d.r;
     const status = d.err ? `<span class="bad">error</span>`
