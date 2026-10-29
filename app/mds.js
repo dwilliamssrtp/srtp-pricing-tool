@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261029-1006";
-import { solve } from "./engine.js?v=20261029-1006";
+import * as DB from "./db.js?v=20261029-1026";
+import { solve } from "./engine.js?v=20261029-1026";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -142,9 +142,11 @@ function sheetView() {
     : "Short-term stress-rupture burst, no safety factor";
 
   /* Supplied is what the customer gets; manufactured is what the floor runs to
-     yield it. Every material quantity in sections 1-3 is on the manufactured
-     length, because that is what has to be bought. The reel plan stays on the
-     supplied length: scrap is trimmed off and never ships. */
+     yield it, and that is the length this sheet is for - the headline length
+     and every material quantity in sections 1-3 move with the scrap figure.
+     The scrap PERCENTAGE is not printed: the floor is told what to build, not
+     the allowance it came from. The reel plan stays on the supplied length,
+     because scrap is trimmed off and never ships. */
   const scrapPct = pct(d.scrap_pct);
   const mfgFt    = Math.ceil(s.lengthFt * (1 + scrapPct));
 
@@ -251,10 +253,6 @@ function sheetView() {
           <td colspan="5">${f0(s.nReels)} reel(s) &middot; ${f0(s.reelWeight)} lbs each
             (${f0(s.reelWeight / 2.2)} kg) &middot; max ${f0(s.reelMax)} ft</td>
         </tr>
-        <tr><td class="mn">4.3</td><td class="ml">Manufactured length: ${f(scrapPct * 100, 2)}% scrap
-          on ${f0(s.lengthFt)} ft supplied</td>
-          <td colspan="5">${f0(mfgFt)} ft (${f0(mfgFt / 3.28)} m) to build &middot;
-            sections 1&ndash;3 are quantities for this length</td></tr>
       </tbody>
     </table>`;
 
@@ -301,7 +299,7 @@ function sheetView() {
         ${kv("Application", esc(s.app))}
         ${kv("API nominal", f(s.apiNominal, 2) + " in")}
         ${kv("FAT min burst", f0(fat) + " psi")}
-        ${kv("Length supplied", f0(s.lengthFt) + " ft / " + f0(s.lengthM) + " m")}
+        ${kv("Length", f0(mfgFt) + " ft / " + f0(mfgFt / 3.28) + " m")}
       </div>
       <p class="basis">FAT basis: ${esc(fatLabel)}. Burst achieved ${f0(s.burstTotal)} psi at a
         ${f(s.braidAngle, 1)}&deg; braid angle. Tensile ${f0(s.tensileStrength)} lbs.</p>
