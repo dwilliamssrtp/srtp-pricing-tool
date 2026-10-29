@@ -4,15 +4,16 @@
 import {
   PIPE, PIPE_ORDER, MATERIALS, BRAID, XBRAIDS, LONGS, COUPLING_BY_NAME,
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
-  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel
-} from "./data.js?v=20261027-1515";
-import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D, MIN_BEND_D } from "./engine.js?v=20261027-1515";
-import * as DB from "./db.js?v=20261027-1515";
-import { initPages } from "./pages.js?v=20261027-1515";
-import * as PARTSUI from "./partsui.js?v=20261027-1515";
-import * as QUOTESUI from "./quotesui.js?v=20261027-1515";
-import * as MDS from "./mds.js?v=20261027-1515";
-import { optimise, designRules, SOFT } from "./optimise.js?v=20261027-1515";
+  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel,
+  CGH_DESIGNS, cghInputs
+} from "./data.js?v=20261029-1006";
+import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D, MIN_BEND_D } from "./engine.js?v=20261029-1006";
+import * as DB from "./db.js?v=20261029-1006";
+import { initPages } from "./pages.js?v=20261029-1006";
+import * as PARTSUI from "./partsui.js?v=20261029-1006";
+import * as QUOTESUI from "./quotesui.js?v=20261029-1006";
+import * as MDS from "./mds.js?v=20261029-1006";
+import { optimise, designRules, checkDesign, SOFT } from "./optimise.js?v=20261029-1006";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -81,7 +82,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261027-1515";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261029-1006";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -377,7 +378,18 @@ const STD_SIZES = [
   { nom:'5"', design:"6",     tableID:5.0, psis:[300,500,750,1500,2250],
     reels:[REEL_145, REEL_145D] },
   { nom:'6"', design:"6.8",   tableID:5.6, psis:[300,500,750,1500,2250],
-    reels:[REEL_145, REEL_145D] }
+    reels:[REEL_145, REEL_145D] },
+  /* CGH order sizes nobody else does, to their own approved datasheets, so
+     these are transcribed recipes rather than anything the optimiser picks:
+     one duty each at the 500 psi / 150 F their sheets carry, on the reel
+     their sheet names. See CGH_DESIGNS for where each one came from. */
+  ...CGH_DESIGNS.map(c => ({
+    nom: `CGH ${c.code}`, design: c.sizeKey, tableID: null, cgh: c,
+    title: `CGH ${c.code} \u2014 ${c.sizeKey} in pipe, fixed to their datasheet`,
+    psis: [c.psi], temps: [c.degF],
+    reels: [{ label:`SP${c.reel.sp}-HD${c.reel.hub}-T${c.reel.t}`,
+              sp:c.reel.sp, hub:c.reel.hub, t:c.reel.t }]
+  }))
 ];
 const STD_TEMPS = [150, 185, 196, 221];
 let STANDARD_ROWS = null;      // built on demand, then cached for the session
@@ -388,18 +400,43 @@ const visibleStandard = () => (STANDARD_ROWS || []).filter(d =>
   && (!STD_FILTER.psi  || String(d.psi)  === STD_FILTER.psi)
   && (!STD_FILTER.degF || String(d.degF) === STD_FILTER.degF));
 
+/* A design that is GIVEN rather than searched for. CGH approved the braid,
+   the pitch, the longs and the reel on their own datasheet, so there is
+   nothing to optimise - the job here is to solve it and report the same
+   checks the optimiser would have reported, so a row that has drifted out
+   of spec still shows as such instead of silently reading "ok".
+
+   Shaped like an optimise() result so the table does not care which it is. */
+function fixedDesign(base, cgh) {
+  const inputs = { ...base, ...cghInputs(cgh) };
+  const r = solve({ ...inputs, prices:PRICES });
+  const chk = checkDesign(r);
+  const row = { inputs, costPerFt:r.costPerFt, burst:r.burstTotal,
+                warnings:chk.soft, blockers:chk.hard, clean:chk.clean,
+                angle:r.braidAngle, weight:r.weightPerFt, solved:r };
+  /* Same allowance as the optimised rows: more longs than the bare
+     circumference fits is tolerated, nothing else is. */
+  const bad = chk.hard.concat(chk.soft.filter(m => m !== SOFT.LONGS_FIT));
+  return bad.length
+    ? { best:null, nearest:{ ...row, blockers:bad }, tried:[], considered:1 }
+    : { best:row, nearest:null, tried:[row], considered:1 };
+}
+
 function buildStandard() {
   const rows = [];
   for (const sz of STD_SIZES)
     for (const psi of sz.psis)
-      for (const degF of STD_TEMPS) {
+      for (const degF of (sz.temps || STD_TEMPS)) {
         const base = { ...DEFAULTS, sizeKey:sz.design, psi, degF, app:"Flowline" };
         let res = null, err = null;
         /* In spec on everything except carrying more longs than the bare
            circumference fits, which is the one allowance the standard table
            makes - braid angle and minimum pitch are not negotiable here. */
-        try { res = optimise({ ...base }, PRICES, { objective:"fewest_passes",
-              allowSoft:[SOFT.LONGS_FIT] }); }
+        try {
+          res = sz.cgh ? fixedDesign(base, sz.cgh)
+                       : optimise({ ...base }, PRICES, { objective:"fewest_passes",
+                           allowSoft:[SOFT.LONGS_FIT] });
+        }
         catch (e) { err = e.message; }
         const hit = res && (res.best || res.nearest);
         /* The optimiser returns the braid it chose, not the finished pipe, so
@@ -516,7 +553,12 @@ function standardHTML() {
       (SP144&middot;HD108&middot;T80) option; 3&quot; and 4&quot; on 12 ft;
       5&quot; and 6&quot; on 14.5 ft only &mdash; foreign (SP174&middot;HD148&middot;T80)
       or domestic (SP174&middot;HD148&middot;T92). A reel reading <b>no</b> is under the
-      bend minimum for that pipe.</p>`;
+      bend minimum for that pipe.</p>
+    <p class="ref" style="margin:6px 0 0">The <b>CGH</b> rows are not optimiser output. Pipe,
+      braid, pitch, longs and reel are all fixed to the datasheet CGH approved, and opening one
+      prints their own label instead of the SRTP legend. They run at 500&nbsp;psi and 150&nbsp;&deg;F
+      &mdash; the row their materials come from, since their sheets&rsquo; 65&nbsp;&deg;C / 149&nbsp;&deg;F
+      is not on our temperature ladder.</p>`;
 }
 
 function renderDesignsBox() {
@@ -609,10 +651,12 @@ document.addEventListener("click", e => {
        overwrite whatever was open before. */
     I = { ...DEFAULTS, ...d.inputs };
     CURRENT_DESIGN = null; BASELINE = null;
-    document.getElementById("designName").value =
-      `${d.nom} ${d.psi}PSI ${d.degF}F standard`;
-    document.getElementById("designNote").value =
-      `From the standard table \u2014 easiest to make (${d.passes} pass).`;
+    document.getElementById("designName").value = d.cgh
+      ? `CGH ${d.cgh.code}`
+      : `${d.nom} ${d.psi}PSI ${d.degF}F standard`;
+    document.getElementById("designNote").value = d.cgh
+      ? `CGH ${d.cgh.code} \u2014 fixed to their approved datasheet, and it prints their label.`
+      : `From the standard table \u2014 easiest to make (${d.passes} pass).`;
     recalc({ rebuild: true });
     markBaseline(); showDirty();
     if (PAGES) PAGES.setPage("designer");

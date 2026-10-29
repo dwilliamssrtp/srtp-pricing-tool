@@ -20,8 +20,8 @@
    That leaves a few thousand solves, which runs in well under a second.
    ===================================================================== */
 
-import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261027-1515";
-import { solve, requiredYarnType } from "./engine.js?v=20261027-1515";
+import { XBRAIDS, LONGS, PITCH_LADDER, BRAID } from "./data.js?v=20261029-1006";
+import { solve, requiredYarnType } from "./engine.js?v=20261029-1006";
 
 /* What "works" means, split the way the workbook actually behaves.
 
@@ -40,6 +40,12 @@ export const SOFT = {
   LONGS_FIT: "more longs than the circumference fits"
 };
 const MIN_ANGLE = 57.3;
+/* A wall that lands exactly on its minimum must pass. The thicknesses are
+   differences of decimals, so an exact 0.070 in jacket arrives as
+   0.06999999999999995 and a bare `>= 0.07` rejects a design the datasheet
+   prints as in spec - CGH LP1075 is one. Compare to the nearest ten
+   thousandth of an inch, which is finer than anything measured on the floor. */
+const DIM_EPS = 5e-5;
 
 export function designRules(r) {
   const yarn = t => (String(t || "").match(/\(([^)]+)\)/) || [, ""])[1] || "—";
@@ -63,7 +69,7 @@ export function designRules(r) {
       ok: r.fiberRatio < 0.30, got: r.fiberRatio, need: 0.30,
       msg: "coupling retention at or above 30%" },
     { label: "Jacket wall", hard: true, fmt: "in", unit: "in", cmp: "≥",
-      ok: !(r.jacketThk < 0.07), got: r.jacketThk, need: 0.07,
+      ok: !(r.jacketThk < 0.07 - DIM_EPS), got: r.jacketThk, need: 0.07,
       msg: "jacket wall below the 0.07 in minimum" },
     { label: "Base layer walls", hard: true, fmt: "in", unit: "in", cmp: ">",
       ok: !(r.minBaseThk <= 0), got: r.minBaseThk, need: 0,

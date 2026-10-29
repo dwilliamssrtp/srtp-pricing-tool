@@ -227,6 +227,69 @@ const SPOOL_STRAIN = [
 ];
 
 /* MDS1!Y14:AB18 — LPG print-code table. */
+/* ---------------------------------------------------------------------
+   CGH - a client who orders sizes we do not otherwise sell and prints
+   their own label. Each entry is a FIXED recipe off their approved
+   datasheet, not something the optimiser is free to re-choose, so it is
+   transcribed here rather than derived:
+
+     LP1025   MDS CGH 1025 POL BL20260165
+     LP1050   MDS CGH 1050 PO  BL20260165
+     LP1075   MDS CGH 1075 PO  BL20260165
+     LP2375   MDS 2.375in CGH      BL20260160
+
+   Solving these inputs against our own tables reproduces all four sheets:
+   every layer weight to within a pound of rounding, and the braid OD, bend
+   ratio, per-spool target lengths, reel capacity and spool weight exactly.
+
+   Their sheets write 65 C / 149 F. Our temperature ladder has no 149, and
+   150 F is the row the materials are actually picked from, so the design
+   runs at 150 and the LABEL prints their 65/149 - `degCLabel` is the
+   printed figure, not a design condition.
+
+   `family` picks which label prints. The 2.375 sheet carries the FP-Flex
+   legend and no API mark; the three small sizes carry the LPG-Flex legend
+   and claim API 15S. That split is what the sheets show, and they are two
+   different purchase orders - if CGH ever moves a size between the two
+   product lines, this is the field to change.                          */
+const CGH_LONGS  = "KN 15-3 (4 Ends Up - Longs)";
+const CGH_XBRAID = "KN 15-1 (4 EndsUp - Xbraids)";
+const CGH_DESIGNS = [
+  { code:"LP1025", sizeKey:"1.25",  family:"lpgflex", prefix:"",
+    psi:500, degF:150, degCLabel:65, longsQty:4, pitch:2.00, passes:1,
+    reel:{ sp:60, hub:42, t:48 } },
+  { code:"LP1050", sizeKey:"1.5",   family:"lpgflex", prefix:"",
+    psi:500, degF:150, degCLabel:65, longsQty:4, pitch:2.50, passes:1,
+    reel:{ sp:60, hub:42, t:48 } },
+  /* Their 1075 sheet alone leads the print with the fractional size.
+
+     It also prints ID 1.33" while its OWN base tube row on the same page
+     says 1.22" - and 1.22 is what we build, PIPE["1.75"].Q. The other two
+     LPG-Flex sheets print their base tube ID, so 1.33 is the odd one out
+     (it is PIPE["1.75"].P, the nominal bore). `printID` reproduces the
+     label CGH approved rather than quietly correcting a controlled
+     document; clear it to print the ID actually built. ASK CGH. */
+  { code:"LP1075", sizeKey:"1.75",  family:"lpgflex", prefix:"1-3/4\" Pipe: ",
+    psi:500, degF:150, degCLabel:65, longsQty:4, pitch:3.00, passes:1,
+    printID:1.33, reel:{ sp:60, hub:42, t:48 } },
+  { code:"LP2375", sizeKey:"2.375", family:"fpflex", dn:48,
+    psi:500, degF:150, degCLabel:65, longsQty:8, pitch:4.00, passes:1,
+    reel:{ sp:96, hub:68, t:56 } }
+];
+const CGH_BY_CODE = {};
+for (const c of CGH_DESIGNS) CGH_BY_CODE[c.code] = c;
+
+/* The inputs that build a CGH pipe, ready to hand to solve() or to drop
+   straight into the Designer. */
+function cghInputs(c) {
+  return { sizeKey:c.sizeKey, psi:c.psi, degF:c.degF, app:"Flowline",
+           sour:"Sweet", color:"Yellow", colorPct:0.03,
+           longs:CGH_LONGS, longsQty:c.longsQty,
+           xbraid:CGH_XBRAID, pitch:c.pitch, passes:c.passes,
+           reelSP:c.reel.sp, reelHub:c.reel.hub, reelT:c.reel.t,
+           cghCode:c.code, client:"CGH" };
+}
+
 const LPG_CODES = {
   1.25:["LP1025",500,null], 1.5:["LP1050",1200,"DN25"], 1.75:["LP1075",500,null],
   2.375:["LP2375",500,"DN48"]
@@ -243,7 +306,8 @@ export {
   TEMPS, SERVICES, LINER_SWEET, LINER_SOUR, BOND_BY_LINER,
   BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR, BRAID_FAMILY_BY_TEMP,
   API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
-  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, SPOOL_REF, SPOOL_STRAIN, LPG_CODES
+  SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, SPOOL_REF, SPOOL_STRAIN, LPG_CODES,
+  CGH_DESIGNS, CGH_BY_CODE, CGH_LONGS, CGH_XBRAID, cghInputs
 };
 
 /* Inputs!AG2:AG45 — longs are fitted in four equal quadrants (Inputs!A114),

@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261027-1515";
-import { solve } from "./engine.js?v=20261027-1515";
+import * as DB from "./db.js?v=20261029-1006";
+import { solve } from "./engine.js?v=20261029-1006";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -43,7 +43,7 @@ export function fromCurrent(inputs, solved, bookId) {
     client: inputs.client || "", project: "",
     base_lead: "", braid_lead: "", cover_lead: "",
     issued_on: new Date().toISOString().slice(0, 10),
-    burst_basis: "api", notes: "",
+    burst_basis: "api", scrap_pct: 0.05, notes: "",
     price_book_id: bookId || null,
     snapshot: { inputs, solved: pick(solved) }
   };
@@ -66,6 +66,14 @@ function pick(r) {
   const o = {};
   for (const k of keys) if (r[k] !== undefined) o[k] = r[k];
   return o;
+}
+
+/* Scrap is stored as a fraction. A document saved before this field existed
+   has no value at all, so fall back to the 5% the floor assumes. */
+const SCRAP_DEFAULT = 0.05;
+function pct(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 && n < 1 ? n : SCRAP_DEFAULT;
 }
 
 export const current = () => DOC;
@@ -133,6 +141,13 @@ function sheetView() {
     ? `API minimum · MAOP × ${(s.xbraid || "").slice(0,2) === "KN" ? "2.31" : "2.00"}`
     : "Short-term stress-rupture burst, no safety factor";
 
+  /* Supplied is what the customer gets; manufactured is what the floor runs to
+     yield it. Every material quantity in sections 1-3 is on the manufactured
+     length, because that is what has to be bought. The reel plan stays on the
+     supplied length: scrap is trimmed off and never ships. */
+  const scrapPct = pct(d.scrap_pct);
+  const mfgFt    = Math.ceil(s.lengthFt * (1 + scrapPct));
+
   const ctrl = `
     <div class="savebar noprint">
       <button id="mdsReload" title="Replace the frozen snapshot with the live design">Reload design</button>
@@ -158,6 +173,9 @@ function sheetView() {
       <label class="ref">Project <input class="mdsf" data-f="project" value="${esc(d.project || "")}" style="width:150px"></label>
       <label class="ref">Client <input class="mdsf" data-f="client" value="${esc(d.client || "")}" style="width:140px"></label>
       <label class="ref">Issued <input class="mdsf" data-f="issued_on" type="date" value="${esc(d.issued_on || "")}"></label>
+      <label class="ref" title="Expected scrap, added to the supplied length to give the length actually built">Scrap %
+        <input class="mdsf" data-f="scrap_pct" type="number" step="0.5" min="0" max="99"
+          value="${f(scrapPct * 100, 2)}" style="width:68px;text-align:right"></label>
       <label class="ref">Baseline <input class="mdsf" data-f="base_lead" value="${esc(d.base_lead || "")}" style="width:104px"></label>
       <label class="ref">Braidline <input class="mdsf" data-f="braid_lead" value="${esc(d.braid_lead || "")}" style="width:104px"></label>
       <label class="ref">Coverline <input class="mdsf" data-f="cover_lead" value="${esc(d.cover_lead || "")}" style="width:104px"></label>
@@ -170,53 +188,53 @@ function sheetView() {
   const base = `
     <table class="mds">
       <thead><tr><th colspan="2">1 &nbsp; Base tube</th>
-        <th>Wall, in</th><th>ID, in</th><th>OD, in</th><th>lbs/ft</th><th>Project lbs (ref)</th></tr></thead>
+        <th>Wall, in</th><th>ID, in</th><th>OD, in</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
       <tbody>
         ${layer("1.1", s.linerLabel || s.liner,  td(f3(s.skinThk)) + td(f3(s.base[0].id)) + td(f3(s.base[0].od))
-                                 + td(f4(s.base[0].wt)) + td(f0(Math.ceil(s.base[0].wt * s.lengthFt))))}
+                                 + td(f4(s.base[0].wt)) + td(f0(Math.ceil(s.base[0].wt * mfgFt))))}
         ${layer("1.2", s.bondLabel || s.bond,   td(f3(s.bondThk)) + td(f3(s.base[1].id)) + td(f3(s.base[1].od))
-                                 + td(f4(s.base[1].wt)) + td(f0(Math.ceil(s.base[1].wt * s.lengthFt))))}
+                                 + td(f4(s.base[1].wt)) + td(f0(Math.ceil(s.base[1].wt * mfgFt))))}
         ${layer("1.3", s.backerLabel || s.backer, td(f3(s.backerThk)) + td(f3(s.base[2].id)) + td(f3(s.baseOD))
-                                 + td(f4(s.base[2].wt)) + td(f0(Math.ceil(s.base[2].wt * s.lengthFt))))}
+                                 + td(f4(s.base[2].wt)) + td(f0(Math.ceil(s.base[2].wt * mfgFt))))}
         <tr class="tot"><td></td><td class="ml">Base tube, ovality 0&ndash;5%</td>
           ${td(f3(s.specWT))}${td(f3(s.linerID))}${td(f3(s.baseOD))}
-          ${td(f4(s.baseWt))}${td(f0(Math.ceil(s.baseWt * s.lengthFt)))}</tr>
+          ${td(f4(s.baseWt))}${td(f0(Math.ceil(s.baseWt * mfgFt)))}</tr>
       </tbody>
     </table>`;
 
   const kg = x => `${f(x, 1)} (${f(x / 2.2, 1)})`;
   const braidRows = [
     layer("2.1", s.longsName, td(f0(s.longsQty)) + td("&mdash;") + td("&mdash;")
-          + td(f4(s.longsWt)) + td(kg(s.longsWtRaw * s.lengthFt))),
+          + td(f4(s.longsWt)) + td(kg(s.longsWtRaw * mfgFt))),
     layer("2.2", s.xbraid, td("Pass 1") + td(f(s.pitch) + '"') + td(f3(s.A57))
-          + td(f4(s.xWt)) + td(kg(s.xWtPerPass * s.lengthFt)))
+          + td(f4(s.xWt)) + td(kg(s.xWtPerPass * mfgFt)))
   ];
   if (s.passes >= 2) braidRows.push(layer("2.3", s.xbraid,
-    td("Pass 2") + td(f(s.pitch2) + '"') + td(f3(s.A58)) + td("") + td(kg(s.xWtPerPass * s.lengthFt))));
+    td("Pass 2") + td(f(s.pitch2) + '"') + td(f3(s.A58)) + td("") + td(kg(s.xWtPerPass * mfgFt))));
   if (s.passes >= 3) braidRows.push(layer("2.4", s.xbraid,
-    td("Pass 3") + td(f(s.pitch3) + '"') + td(f3(s.A59)) + td("") + td(kg(s.xWtPerPass * s.lengthFt))));
+    td("Pass 3") + td(f(s.pitch3) + '"') + td(f3(s.A59)) + td("") + td(kg(s.xWtPerPass * mfgFt))));
   if (s.is24T) braidRows.push(layer("2.5", "24-Tensile · " + s.tBraid,
     td("24 ends") + td(f(s.tPitch) + '"') + td("") + td(f4(s.tWt)) + td("")));
 
   const braid = `
     <table class="mds">
       <thead><tr><th colspan="2">2 &nbsp; Reinforcement</th>
-        <th>Number / pass</th><th>Pitch &plusmn;0.040</th><th>OD, in</th><th>lbs/ft</th><th>lbs (kg)</th></tr></thead>
+        <th>Number / pass</th><th>Pitch &plusmn;0.040</th><th>OD, in</th><th>lbs/ft</th><th>Mfg lbs (kg)</th></tr></thead>
       <tbody>${braidRows.join("")}</tbody>
     </table>`;
 
   const cover = `
     <table class="mds">
       <thead><tr><th colspan="2">3 &nbsp; Cover</th>
-        <th>Min wall</th><th>Wall, in</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Project lbs (ref)</th></tr></thead>
+        <th>Min wall</th><th>Wall, in</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
       <tbody>
         ${layer("3.1", s.jacketLabel || s.jacket, td("&ge;0.070") + td(f4(s.jacketThk)) + td(f3(s.jacketOD))
-                + td(f4(s.jacketWt)) + td(f0(Math.ceil(s.jacketWt * s.lengthFt))))}
+                + td(f4(s.jacketWt)) + td(f0(Math.ceil(s.jacketWt * mfgFt))))}
         ${layer("3.2", s.colorLabel || s.colorMB, td("") + td("") + td("")
-                + td(f4(s.colorWt)) + td(f0(Math.ceil(s.colorWt * s.lengthFt))))}
+                + td(f4(s.colorWt)) + td(f0(Math.ceil(s.colorWt * mfgFt))))}
         <tr class="tot"><td></td><td class="ml">Finished product</td>
           ${td("")}${td(f4(s.jacketThk))}${td(f3(s.jacketOD))}
-          ${td(f3(s.weightPerFt))}${td(f0(Math.ceil(s.weightPerFt * s.lengthFt)))}</tr>
+          ${td(f3(s.weightPerFt))}${td(f0(Math.ceil(s.weightPerFt * mfgFt)))}</tr>
       </tbody>
     </table>`;
 
@@ -231,7 +249,12 @@ function sheetView() {
         <tr><td class="mn">4.2</td><td class="ml">Target length: base ${f0(s.lenBase)} ft &middot;
           braid ${f0(s.lenBraid)} ft &middot; finished ${f0(s.lenFinished)} ft</td>
           <td colspan="5">${f0(s.nReels)} reel(s) &middot; ${f0(s.reelWeight)} lbs each
-            (${f0(s.reelWeight / 2.2)} kg) &middot; max ${f0(s.reelMax)} ft</td></tr>
+            (${f0(s.reelWeight / 2.2)} kg) &middot; max ${f0(s.reelMax)} ft</td>
+        </tr>
+        <tr><td class="mn">4.3</td><td class="ml">Manufactured length: ${f(scrapPct * 100, 2)}% scrap
+          on ${f0(s.lengthFt)} ft supplied</td>
+          <td colspan="5">${f0(mfgFt)} ft (${f0(mfgFt / 3.28)} m) to build &middot;
+            sections 1&ndash;3 are quantities for this length</td></tr>
       </tbody>
     </table>`;
 
@@ -278,7 +301,7 @@ function sheetView() {
         ${kv("Application", esc(s.app))}
         ${kv("API nominal", f(s.apiNominal, 2) + " in")}
         ${kv("FAT min burst", f0(fat) + " psi")}
-        ${kv("Length", f0(s.lengthFt) + " ft / " + f0(s.lengthM) + " m")}
+        ${kv("Length supplied", f0(s.lengthFt) + " ft / " + f0(s.lengthM) + " m")}
       </div>
       <p class="basis">FAT basis: ${esc(fatLabel)}. Burst achieved ${f0(s.burstTotal)} psi at a
         ${f(s.braidAngle, 1)}&deg; braid angle. Tensile ${f0(s.tensileStrength)} lbs.</p>
@@ -368,7 +391,11 @@ document.addEventListener("change", async e => {
   const pick2 = e.target.id === "mdsPickDesign" ? e.target : null;
   const basis = e.target.id === "mdsBasis" ? e.target : null;
   try {
-    if (f && DOC) { DOC[f.dataset.f] = e.target.value; H.refresh(); return; }
+    if (f && DOC) {
+      const k = f.dataset.f;
+      DOC[k] = k === "scrap_pct" ? pct(Number(e.target.value) / 100) : e.target.value;
+      H.refresh(); return;
+    }
     if (basis && DOC) { DOC.burst_basis = basis.value; H.refresh(); return; }
     if (pick2 && pick2.value) { await buildFromDesign(pick2.value); H.refresh();
       status("Loaded."); return; }

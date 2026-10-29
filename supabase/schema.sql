@@ -339,6 +339,9 @@ create table if not exists public.mds_documents (
   client text, project text, base_lead text, braid_lead text, cover_lead text,
   issued_on date default current_date,
   burst_basis text not null default 'api' check (burst_basis in ('api','stress_rupture')),
+  -- Expected scrap as a fraction. Manufactured = supplied x (1 + scrap_pct), and
+  -- the material quantities on the sheet are for the manufactured length.
+  scrap_pct numeric not null default 0.05 check (scrap_pct >= 0 and scrap_pct < 1),
   notes text, snapshot jsonb not null,
   price_book_id uuid references public.price_books(id),
   created_by uuid not null references public.profiles(id) default auth.uid(),

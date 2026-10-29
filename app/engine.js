@@ -3,8 +3,8 @@ import {
   COUPLING_OD_POST, CDS_FITTINGS, SERVICES, LINER_SWEET, LINER_SOUR,
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
-  matCode, APP_CODES, sizeCode
-} from "./data.js?v=20261027-1515";
+  matCode, APP_CODES, sizeCode, CGH_BY_CODE
+} from "./data.js?v=20261029-1006";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -25,6 +25,39 @@ const DEG = 57.3;        // the sheet's degree constant for ATAN/TAN
 const DEG2 = 57.2958;    // the sheet's degree constant inside SIN()
 
 /* Approximate VLOOKUP over an ascending [key, value] list. */
+/* ---------------------------------------------------------------------
+   The CGH print legend, transcribed from their four issued datasheets.
+
+   Two product lines with two different legends, see CGH_DESIGNS. Neither
+   gets the API monogram: their sheets both note that downhole and LPG
+   product does not carry it, and the mark only renders off printLine1.
+
+   The temperature pair is CGH's own 65 C / 149 F, taken from the entry
+   rather than from the design temperature the pipe is actually built at.
+
+   Two readings are INFERRED, because the PDF text of the three LPG-Flex
+   sheets is clipped at the right margin: the bar figure in "rated 500psi -
+   34bar" (34 is what their own sheet header prints for 500 psi) and that
+   the clipped line ends at "API-15S Standard", which is what the one
+   un-clipped copy shows. Worth a glance against a clean original.
+   --------------------------------------------------------------------- */
+function cghPrint(o, c) {
+  const od = rnd(o.jacketOD, 2).toFixed(2);
+  const id = rnd(c.printID != null ? c.printID : o.linerID, 2).toFixed(2);
+  const degC = c.degCLabel != null ? c.degCLabel : o.degC;
+  const degF = Math.round(degC * 9 / 5 + 32);
+  if (c.family === "fpflex") {
+    o.printLine1 = `FP-Flex ${c.code}${c.dn ? ` DN${c.dn}` : ""}`;
+    o.printLine2 = `P:${rUp(o.psi / 14.5, 0)}bar T:-40/+${degC}°`;
+    o.printLine3 = "use only FP-Flex couplings (Date Code & Meters) CGH Group";
+  } else {
+    o.printLine1 = `${c.prefix || ""}CGH LPG-Flex ${c.code} OD ${od}" - ID ${id}"`
+                 + " (Date Code: Year Month Day Hour)";
+    o.printLine2 = `${degF}°F - ${degC}°C, rated ${o.psi}psi - ${Math.round(o.psi / 14.5)}bar`;
+    o.printLine3 = "LPG, Propane, Butane (Use only CGH LPG-Flex Couplings) API-15S Standard";
+  }
+}
+
 function vlookupApprox(key, pairs) {
   let hit = null;
   for (const [k, v] of pairs) { if (k <= key + EPS) hit = v; else break; }
@@ -389,6 +422,9 @@ export function solve(inp) {
     o.printLine3 = `${o.sour} Environment Only - Use SRTP® couplings only - XXXXXXXXX01 (Date Code & Footage)`;
   }
   o.printLine2 = `MAOP: ${o.psi}psi (${rUp(o.psi/14.5,1)}bars) - MAOT: ${o.degC}°C (${rUp(o.degC*9/5+32,0)}°F)`;
+  /* CGH print their own legend, so it replaces all three lines rather than
+     adding to them. Set last for that reason. */
+  if (CGH_BY_CODE[inp.cghCode]) cghPrint(o, CGH_BY_CODE[inp.cghCode]);
 
   /* ---------------- 15. reel / wrap model (MDS1!K3:M47, F31:F39) --- */
   o.reelSP = inp.reelSP; o.reelHub = inp.reelHub; o.reelT = inp.reelT;
