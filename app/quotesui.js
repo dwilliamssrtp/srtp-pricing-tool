@@ -8,11 +8,11 @@
    flange and splice descriptions from the pipe size, pressure and
    connection material.
    ===================================================================== */
-import * as DB from "./db.js?v=20261029-1318";
-import { solve, reelFit } from "./engine.js?v=20261029-1318";
-import { REEL_T } from "./data.js?v=20261029-1318";
-import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES, BRAIDERS } from "./parts.js?v=20261029-1318";
-import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261029-1318";
+import * as DB from "./db.js?v=20261029-1334";
+import { solve, reelFit } from "./engine.js?v=20261029-1334";
+import { REEL_T } from "./data.js?v=20261029-1334";
+import { partsForPipe, CONNECTION_MATERIALS, SEALING_TYPES, BRAIDERS } from "./parts.js?v=20261029-1334";
+import { quoteTotals, salesQuoteView, priceHistoryNotice, priceForMargin } from "./quote.js?v=20261029-1334";
 
 let H = null;                   // host helpers from ui.js
 let CUSTOMERS = [], DESIGNS = [], PARTS = [], SPEEDS = [], SETTINGS = [];
@@ -129,8 +129,15 @@ export function groupFromDesign(design, { groupNo, suppliedFt, connectionMateria
   const sizeKey = String(inputs.sizeKey).replace(/\s*(DH|LPG)$/, "");
   const p = partsForPipe({ rtpSize: sizeKey, psi: inputs.psi, connectionMaterial, sealing });
   const reelCode = `SP${inputs.reelSP}-HD${inputs.reelHub}-T${inputs.reelT}`;
+  /* What goes ON a reel, which is not always what one holds: a design with a
+     set length per reel is wound to that figure and the rest of the flange is
+     left empty, so the quote has to buy reels against the agreed figure and
+     not against the capacity. r.lenFinished is already capped by the order, so
+     only the per-reel figure is applied here. */
+  const perReel  = Number(inputs.reelLenFt) > 0 ? Number(inputs.reelLenFt) : null;
+  const onReel   = cap => perReel === null ? cap : Math.min(cap, perReel);
   const capacity = r.reelCapacity || 0;
-  const reels = capacity ? Math.ceil(suppliedFt / capacity) : 0;
+  const reels = capacity ? Math.ceil(suppliedFt / onReel(capacity)) : 0;
 
   const look = (kind, extra) => DB.findPart(PARTS, { kind, ...extra });
   const priced = (part, qty, unit) => pricedFromPart(part, qty, unit, markup);
@@ -169,13 +176,20 @@ export function groupFromDesign(design, { groupNo, suppliedFt, connectionMateria
     const fit = reelFit(r.jacketOD, inputs.reelSP, inputs.reelHub, t);
     if (!fit.ok) continue;                     // under the bend minimum
     const cap = Math.round(fit.capacity || 0);
-    reelVariants.push({ code, part, cap, n: cap ? Math.ceil(suppliedFt / cap) : 0 });
+    const per = Math.round(onReel(cap));
+    reelVariants.push({ code, part, cap, per, n: per ? Math.ceil(suppliedFt / per) : 0 });
   }
   if (!reelVariants.length)
-    reelVariants.push({ code: reelCode, part: reelPart, cap: Math.round(capacity), n: reels });
+    reelVariants.push({ code: reelCode, part: reelPart, cap: Math.round(capacity),
+                        per: Math.round(onReel(capacity)), n: reels });
   reelVariants.forEach((v, i) => {
+    /* Say both figures when they differ, so nobody reads the short wind as a
+       smaller reel having been quoted. */
+    const how = v.per < v.cap
+      ? `${H.f0(v.per)} ft per reel, wound short of ${H.f0(v.cap)} ft`
+      : `${H.f0(v.cap)} ft per reel`;
     lines.push({ group_no: groupNo, sort: 4 + i, kind: "reel",
-                 label: `Reel ${v.code} (${H.f0(v.cap)} ft per reel)`,
+                 label: `Reel ${v.code} (${how})`,
                  ...priced(v.part, v.n, "ea") });
   });
 

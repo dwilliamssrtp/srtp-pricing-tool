@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261029-1318";
-import { solve } from "./engine.js?v=20261029-1318";
+import * as DB from "./db.js?v=20261029-1334";
+import { solve } from "./engine.js?v=20261029-1334";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -64,6 +64,7 @@ function pick(r) {
     "longsWtRaw","braidAngle","burstTotal","minBurst","shortBurst","targetBurstR",
     "hydroP","hydroFactor","couplingName","reelSP","reelHub","reelT","minD",
     "lenFinished","lenBraid","lenBase","reelMax","reelWeight","nReels",
+    "reelLenFt","reelFixed","reelSpareFt",
     "printLine1","printLine2","printLine3","tensileStrength","is24T","tBraid","tWt","tPitch"];
   const o = {};
   for (const k of keys) if (r[k] !== undefined) o[k] = r[k];
@@ -325,6 +326,12 @@ function sheetView() {
           <td colspan="5">${ov("4.2.per",
             `${f0(s.nReels)} reel(s) &middot; ${f0(s.reelWeight)} lbs each (${f0(s.reelWeight / 2.2)} kg) &middot; max ${f0(s.reelMax)} ft`)}</td>
         </tr>
+        ${s.reelFixed ? `<tr><td class="mn">4.3</td><td class="ml">${ov("4.3.name",
+            `<b>Wind to ${f0(s.reelLenFt)} ft per reel.</b> Cut and change reels at that
+             length &mdash; do not fill the reel.`)}</td>
+          <td colspan="5">${ov("4.3.per",
+            `Reel holds ${f0(s.reelMax)} ft${s.reelSpareFt
+              ? ` &middot; ${f0(s.reelSpareFt)} ft left empty` : ""}`)}</td></tr>` : ""}
       </tbody>
     </table>`;
 

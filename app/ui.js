@@ -6,14 +6,14 @@ import {
   TEMPS, API_NOMINAL, REEL_SP, REEL_HUB, REEL_T, REELS, PITCH_LADDER, SERVICE_LIFE,
   SPOOL_PIPE, SPOOL_SP, SPOOL_HUB, SPOOL_T, LONGS_LADDER, PSI_LADDER, matLabel,
   CGH_DESIGNS, cghInputs
-} from "./data.js?v=20261029-1318";
-import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D, MIN_BEND_D } from "./engine.js?v=20261029-1318";
-import * as DB from "./db.js?v=20261029-1318";
-import { initPages } from "./pages.js?v=20261029-1318";
-import * as PARTSUI from "./partsui.js?v=20261029-1318";
-import * as QUOTESUI from "./quotesui.js?v=20261029-1318";
-import * as MDS from "./mds.js?v=20261029-1318";
-import { optimise, designRules, checkDesign, SOFT } from "./optimise.js?v=20261029-1318";
+} from "./data.js?v=20261029-1334";
+import { solve, solveSpool, matKey, reelFit, SPOOL_MIN_D, MIN_BEND_D } from "./engine.js?v=20261029-1334";
+import * as DB from "./db.js?v=20261029-1334";
+import { initPages } from "./pages.js?v=20261029-1334";
+import * as PARTSUI from "./partsui.js?v=20261029-1334";
+import * as QUOTESUI from "./quotesui.js?v=20261029-1334";
+import * as MDS from "./mds.js?v=20261029-1334";
+import { optimise, designRules, checkDesign, SOFT } from "./optimise.js?v=20261029-1334";
 
 /* The active price book and its prices, filled in at sign-in. */
 let BOOK = null;
@@ -82,7 +82,7 @@ const UNDO_BTN = '<button id="optUndo" type="button" style="margin-left:6px;'
   + 'padding:1px 7px;font-size:11px" title="Put back the braid, pitch, passes '
   + 'and longs you had before Optimise ran">Undo</button>';
 let PAGES = null;              // top-level page controller, created at boot
-const BUILD = "20261029-1318";           // stamped by bump.ps1 so a deploy is identifiable
+const BUILD = "20261029-1334";           // stamped by bump.ps1 so a deploy is identifiable
 
 /* ---------- formatting helpers ---------- */
 const f = (v, d=2) => (v === null || v === undefined || v === "" || Number.isNaN(v))
@@ -125,7 +125,7 @@ const DEFAULTS = {
   longs:"TN 15-3 (6 Ends Up - Longs)", longsQty:40,
   tBraid:"KN 15-1 (4 EndsUp - Xbraids)", tPitch:8, tPasses:1,
   colorPct:0.03, margin:0.50,
-  reelSP:144, reelHub:108, reelT:80,
+  reelSP:144, reelHub:108, reelT:80, reelLenFt:0,
   priceBookId:null
 };
 const SPOOL_DEFAULTS = {
@@ -185,7 +185,11 @@ function derivedValues(r) { return {
   d_minPitch:  f(r.minPitch),
   d_maxLongs:  f0(r.maxLongs),
   d_longsPred: f(r.longsPrediction, 1),
-  d_minD:      f(r.minD, 1) + "D"
+  d_minD:      f(r.minD, 1) + "D",
+  d_perReel:   f0(r.lenFinished) + " ft"
+             + (r.reelFixed ? " of " + f0(r.reelMax) + " ft"
+                            + (r.reelSpareFt ? " · " + f0(r.reelSpareFt) + " ft spare" : "")
+                           : " (filled)")
 };}
 function updateDerived(r) {
   const v = derivedValues(r);
@@ -247,11 +251,16 @@ function renderReels(r) {
   const host = document.getElementById("d_reels");
   if (!host) return;
   if (!(r.jacketOD > 0)) { host.innerHTML = ""; return; }
+  /* A set length per reel caps every candidate alike, so the comparison stays
+     a comparison: the reel count is then what each one would actually ship,
+     not what it could hold. */
+  const perReel = Number(I.reelLenFt) > 0 ? Number(I.reelLenFt) : null;
   const rows = REELS.map(k => {
     const fit = reelFit(r.jacketOD, k.sp, k.hub, k.t);
     const cur = k.sp === I.reelSP && k.hub === I.reelHub && k.t === I.reelT;
-    const reels = fit.ok && fit.capacity ? Math.ceil(r.lengthFt / fit.capacity) : null;
-    return { ...k, ...fit, cur, reels };
+    const onReel = perReel === null ? fit.capacity : Math.min(fit.capacity, perReel);
+    const reels = fit.ok && onReel ? Math.ceil(r.lengthFt / onReel) : null;
+    return { ...k, ...fit, cur, reels, onReel };
   });
   const best = rows.filter(x => x.ok).sort((a, b) => b.capacity - a.capacity)[0];
   host.innerHTML = `<div class="cap">Reel check &mdash; ${f0(r.lengthFt)} ft of `
@@ -259,8 +268,10 @@ function renderReels(r) {
     + rows.map(k => {
     const state = !k.ok ? "fail" : (k.cur ? "warn" : "pass");
     const mark  = k.cur ? "●" : (k.ok ? "✓" : "✗");
+    const held = k.onReel < k.capacity
+      ? `${f0(k.onReel)} of ${f0(k.capacity)} ft` : `${f0(k.capacity)} ft`;
     const right = k.ok
-      ? `${f0(k.capacity)} ft${k.reels ? " · " + k.reels + " reel" + (k.reels > 1 ? "s" : "") : ""}`
+      ? `${held}${k.reels ? " · " + k.reels + " reel" + (k.reels > 1 ? "s" : "") : ""}`
       : `${f(k.bendD, 1)}D &lt; ${MIN_BEND_D}D`;
     return `<div class="row ${state}" data-reel="${k.sp}:${k.hub}:${k.t}"
               title="${k.ok ? "Bend " + f(k.bendD,1) + "D" : "Bend radius too tight for this pipe"}">`
@@ -330,7 +341,9 @@ function renderInputs() {
     field("Spool flange OD &mdash; SP","reelSP","select",{opts:REEL_SP,unit:"in"}),
     field("Hub diameter &mdash; HD","reelHub","select",{opts:REEL_HUB,unit:"in"}),
     field("Traverse &mdash; T","reelT","select",{opts:REEL_T,unit:"in"}),
+    field("Set length per reel","reelLenFt","num",{step:50,min:0,unit:"ft"}),
     derived("Min bend ratio (HD / jacket OD)","d_minD", f(r.minD,1)+"D"),
+    derived("Per reel / reel holds","d_perReel", derivedValues(r).d_perReel),
     `<div class="chk" id="d_reels"></div>`,
 
     `<div class="grp">Commercial</div>`,
@@ -1742,7 +1755,7 @@ function readNum(el, current) {
   return Number.isFinite(v) ? v : current;
 }
 const NUMERIC_I = new Set(["lengthFt","psi","degF","years","passes","longsQty","pitch",
-  "colorPct","margin","reelSP","reelHub","reelT","tPitch","tPasses"]);
+  "colorPct","margin","reelSP","reelHub","reelT","reelLenFt","tPitch","tPasses"]);
 
 document.addEventListener("input", e => {
   const k = e.target.dataset.k, sk = e.target.dataset.sk;

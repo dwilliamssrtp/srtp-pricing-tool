@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode, CGH_BY_CODE
-} from "./data.js?v=20261029-1318";
+} from "./data.js?v=20261029-1334";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -439,14 +439,39 @@ export function solve(inp) {
   const wrapPairs = o.wraps.map(w => [w.odTotal, w.lenFt]);
   o.reelCapacity = o.wraps.length ? vlookupApprox(o.reelSP, wrapPairs) : 0;   // VLOOKUP(E28,...)
   o.reelMax      = rUp(o.reelCapacity || 0, 0);                              // I37
-  o.lenFinished  = Math.min(o.reelCapacity || 0, o.lengthFt);                // F37
+
+  /* A fixed length per reel. Some customers buy reels wound to an agreed
+     figure and will not take a part reel or an over-wound one, however much
+     more the flanges would hold - so the plan is capped by the order, by what
+     the reel physically takes, AND by that figure when one is set. Unset (0,
+     null, blank) leaves the reel filled, which is what every design did
+     before and still does. */
+  const perReel  = Number(inp.reelLenFt) > 0 ? Number(inp.reelLenFt) : null;
+  o.reelLenFt    = perReel;
+  o.reelFixed    = perReel !== null;
+  const roomFor  = o.reelCapacity || 0;
+  o.lenFinished  = perReel === null                                          // F37
+    ? Math.min(roomFor, o.lengthFt)
+    : Math.min(roomFor, o.lengthFt, perReel);
+  /* How much of the reel that leaves unused, which is the thing a buyer is
+     paying for and the thing a planner wants to see. */
+  o.reelSpareFt  = o.reelFixed ? Math.max(0, roomFor - o.lenFinished) : 0;
   o.lenBraid     = o.lenFinished * 1.01;                                     // F34
   o.lenBase      = o.lenBraid + 10;                                          // F31
   o.reelWeight   = o.lenFinished * o.weightPerFt;                            // F39
   o.minD         = o.jacketOD ? o.reelHub / o.jacketOD : 0;                  // G27
-  o.nReels       = o.lenBraid ? rUp(o.lengthFt / o.lenBraid, 0) : 0;          // WO!C18
+  /* Reels are counted against what each one SHIPS, not against the braid-line
+     length. The workbook divides by F34, which is 1% longer than the finished
+     pipe and so can come up a reel short on an order landing just above a
+     multiple; dividing by F37 is the figure the shipment is actually made of.
+     It matters more now that a reel can be deliberately short-filled. */
+  o.nReels       = o.lenFinished ? rUp(o.lengthFt / o.lenFinished, 0) : 0;    // cf. WO!C18
   if (o.minD && o.minD < MIN_BEND_D)
     warn.push(`Reel hub/OD ratio is ${o.minD.toFixed(1)}D — below the ≥${MIN_BEND_D}D minimum bend.`);
+  if (o.reelFixed && roomFor && perReel > roomFor)
+    warn.push(`${Math.round(perReel).toLocaleString()} ft per reel was asked for, but this `
+            + `reel holds ${Math.round(roomFor).toLocaleString()} ft — the plan uses the `
+            + `reel's capacity. Pick a longer traverse or a larger flange.`);
 
   /* ---------------- 16. CDS derived (CDS!E16:E26) ------------------- */
   o.minBendFt = 30 * o.jacketOD / 12;                                   // E20

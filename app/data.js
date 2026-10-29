@@ -258,6 +258,10 @@ const SPOOL_STRAIN = [
    "Solid Wall". Only 2375 is multi-layer, and it alone leaves this unset.
    Confirmed by the client 2026-10-29. */
 const CGH_SOLID_NYLON = ["Nylon - 290", "Nylon - 290", "Nylon - 290"];
+/* CGH order reels wound to an agreed length rather than filled. Put that
+   figure on a design as reel.len (feet) and the whole plan - MDS, reel count,
+   splices and the quote - follows it; left off, the reel fills as before.
+   None are set yet: the agreed lengths have not been supplied. */
 const CGH_LONGS  = "KN 15-3 (4 Ends Up - Longs)";
 const CGH_XBRAID = "KN 15-1 (4 EndsUp - Xbraids)";
 const CGH_DESIGNS = [
@@ -294,6 +298,7 @@ function cghInputs(c) {
            longs:CGH_LONGS, longsQty:c.longsQty,
            xbraid:CGH_XBRAID, pitch:c.pitch, passes:c.passes,
            reelSP:c.reel.sp, reelHub:c.reel.hub, reelT:c.reel.t,
+           reelLenFt:c.reel.len || 0,
            cghCode:c.code, client:"CGH" };
 }
 
