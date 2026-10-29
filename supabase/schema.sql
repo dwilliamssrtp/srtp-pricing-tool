@@ -342,6 +342,10 @@ create table if not exists public.mds_documents (
   -- Expected scrap as a fraction. Manufactured = supplied x (1 + scrap_pct), and
   -- the material quantities on the sheet are for the manufactured length.
   scrap_pct numeric not null default 0.05 check (scrap_pct >= 0 and scrap_pct < 1),
+  -- Hand edits, keyed by cell. The sheet is generated from the snapshot, so a
+  -- typed correction cannot live in the markup; it is re-applied over the
+  -- computed value on every render. Empty means the sheet prints the solve.
+  overrides jsonb not null default '{}'::jsonb,
   notes text, snapshot jsonb not null,
   price_book_id uuid references public.price_books(id),
   created_by uuid not null references public.profiles(id) default auth.uid(),

@@ -359,6 +359,20 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 .mdsfoot div b{display:block;border-bottom:1px solid #999;min-height:24px;font-weight:400}
 .mdsfoot .ref{border:0;color:#777;text-align:right;align-self:center}
 
+/* Free edit on the MDS. An editable cell shows where it is while the mode is
+   on; an edited one stays marked afterwards so the sheet never hides that a
+   figure is a hand correction rather than the solve. Both marks are screen
+   only - the printed sheet is a controlled document and reads clean. */
+.mdsdoc.editing .ove{outline:1px dashed #9aa4ad;outline-offset:1px;border-radius:2px;
+  background:#fbfcfd;cursor:text}
+.mdsdoc.editing .ove:hover{outline-color:#4a90d9;background:#f2f8fe}
+.mdsdoc.editing .ove:focus{outline:2px solid #1f6fb8;outline-offset:1px;background:#fff}
+.mdsdoc.editing .ove:empty{display:inline-block;min-width:2.4em;min-height:1em}
+.mdsdoc .ovd{background:#fff3cd;box-shadow:inset 2px 0 0 #d39e00;padding-left:4px}
+.mdsdoc.editing .ovd{background:#fff8e1}
+.editnote{margin:-4px 0 10px;max-width:8.5in;line-height:1.5}
+.editnote b{color:var(--ink)}
+
 @media print{
   @page{size:letter portrait;margin:0}
   html,body{background:#fff}
@@ -367,6 +381,11 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
   .sheetwrap{margin:0;display:block}
   .mdsdoc{width:auto;min-height:auto;border:0;border-radius:0;box-shadow:none;
     padding:0.4in 0.45in;page-break-inside:avoid}
+  /* An edited sheet prints as a sheet: no dashed boxes, no edit highlight.
+     The paper carries the figures the floor builds to, not the history of
+     which of them were typed in by hand. */
+  .mdsdoc .ove,.mdsdoc .ovd{outline:0!important;background:none!important;
+    box-shadow:none!important;padding-left:0!important}
   /* The inactive pages already carry [hidden], so one sheet of paper gets
      exactly one page's worth of content on its own. Do NOT name the pages
      here: that hid #page-quotes even when Quotes was the page being
@@ -631,6 +650,6 @@ table.mds tr.tot td{background:#f6f7f8;font-weight:700}
 
 </div>
 
-<script type="module" src="app/ui.js?v=20261029-1039"></script>
+<script type="module" src="app/ui.js?v=20261029-1318"></script>
 </body>
 </html>

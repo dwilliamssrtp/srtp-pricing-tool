@@ -16,13 +16,15 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261029-1039";
-import { solve } from "./engine.js?v=20261029-1039";
+import * as DB from "./db.js?v=20261029-1318";
+import { solve } from "./engine.js?v=20261029-1318";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
 let DOC = null;                   // the open document
 let VIEW = "sheet";               // sheet | list
+let EDIT = false;                 // free-edit mode on the open sheet
+let DIRTY = false;                // hand edits made since the last save
 
 export function init(helpers) { H = helpers; }
 
@@ -43,7 +45,7 @@ export function fromCurrent(inputs, solved, bookId) {
     client: inputs.client || "", project: "",
     base_lead: "", braid_lead: "", cover_lead: "",
     issued_on: new Date().toISOString().slice(0, 10),
-    burst_basis: "api", scrap_pct: 0.05, notes: "",
+    burst_basis: "api", scrap_pct: 0.05, notes: "", overrides: {},
     price_book_id: bookId || null,
     snapshot: { inputs, solved: pick(solved) }
   };
@@ -74,6 +76,44 @@ const SCRAP_DEFAULT = 0.05;
 function pct(v) {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 && n < 1 ? n : SCRAP_DEFAULT;
+}
+
+/* ------------------------------------------------------- free edit ----
+
+   Every printed figure on the sheet is computed from the frozen snapshot,
+   so a hand correction cannot simply live in the markup: the page is
+   regenerated from the model on each refresh and would wipe it. Instead
+   each editable cell carries a stable key and the typed text is stored in
+   DOC.overrides under that key. Rendering prefers the override; deleting
+   the key returns the cell to the computed value.
+
+   Keys are the sheet's own row and column names ("1.2.wall"), so they stay
+   meaningful across a save, a reload and a revision. The one case they can
+   drift is "Reload design" onto a design with a different number of braid
+   passes, since rows 2.3-2.5 only exist for some designs - which is why
+   reloading warns when overrides are present.
+
+   An override is user-typed text and is escaped on the way out. A computed
+   value is markup this module built (entities, the API monogram) and is
+   not, so the two are deliberately not interchangeable below. */
+
+const ovMap = () => (DOC && DOC.overrides && typeof DOC.overrides === "object")
+  ? DOC.overrides : {};
+const ovHas = k => Object.prototype.hasOwnProperty.call(ovMap(), k);
+export const ovCount = () => Object.keys(ovMap()).length;
+
+/* Documents saved before this existed have no map at all. */
+function ovEnsure() {
+  if (!DOC.overrides || typeof DOC.overrides !== "object") DOC.overrides = {};
+  return DOC.overrides;
+}
+
+function ov(key, computed) {
+  const edited = ovHas(key);
+  const body = edited ? H.esc(String(ovMap()[key])) : String(computed);
+  if (!EDIT) return edited ? `<span class="ovd">${body}</span>` : body;
+  return `<span class="ove${edited ? " ovd" : ""}" data-ov="${H.esc(key)}"`
+       + ` contenteditable="true" spellcheck="false">${body}</span>`;
 }
 
 export const current = () => DOC;
@@ -150,8 +190,15 @@ function sheetView() {
   const scrapPct = pct(d.scrap_pct);
   const mfgFt    = Math.ceil(s.lengthFt * (1 + scrapPct));
 
+  const nOv = ovCount();
   const ctrl = `
     <div class="savebar noprint">
+      <button id="mdsEdit" class="${EDIT ? "pri" : ""}"
+        title="Type directly into any figure or wording on the sheet">${
+        EDIT ? "&#10003; Free edit on" : "Free edit"}</button>
+      ${EDIT || nOv ? `<button id="mdsResetOv"${nOv ? "" : " disabled"}
+        title="Discard every hand edit and return the sheet to the design">Reset edits${
+        nOv ? ` (${nOv})` : ""}</button>` : ""}
       <button id="mdsReload" title="Replace the frozen snapshot with the live design">Reload design</button>
       <select id="mdsPickDesign" style="flex:1 1 220px">
         <option value="">— load another design —</option>
@@ -162,7 +209,8 @@ function sheetView() {
         <option value="api"${d.burst_basis === "api" ? " selected" : ""}>FAT: API minimum</option>
         <option value="stress_rupture"${d.burst_basis === "stress_rupture" ? " selected" : ""}>FAT: stress rupture</option>
       </select>
-      <button class="pri" id="mdsSave">${d.id ? "Save" : "Save as new"}</button>
+      <button class="pri" id="mdsSave">${
+        DIRTY ? "Save edits" : d.id ? "Save" : "Save as new"}</button>
       ${d.id ? `<button id="mdsRevise" title="Save as the next revision">New revision</button>` : ""}
       <button id="mdsPrint">Print</button>
       <button id="mdsSavedList">Saved (${SAVED.length})</button>
@@ -181,103 +229,129 @@ function sheetView() {
       <label class="ref">Baseline <input class="mdsf" data-f="base_lead" value="${esc(d.base_lead || "")}" style="width:104px"></label>
       <label class="ref">Braidline <input class="mdsf" data-f="braid_lead" value="${esc(d.braid_lead || "")}" style="width:104px"></label>
       <label class="ref">Coverline <input class="mdsf" data-f="cover_lead" value="${esc(d.cover_lead || "")}" style="width:104px"></label>
-    </div>`;
+    </div>
+    ${EDIT ? `<p class="ref noprint editnote">Free edit is on. Click any figure or wording
+      on the sheet and type over it. An edited cell stays marked, emptying one restores
+      the computed value, and the edits are kept with the document — so they survive a
+      reload of the design and <b>Reset edits</b> is the way back to what it solves to.</p>`
+    : nOv ? `<p class="ref noprint editnote">${nOv} cell${nOv === 1 ? "" : "s"} on this
+      sheet ${nOv === 1 ? "is a hand edit" : "are hand edits"}, not what the design
+      solves to.</p>` : ""}`;
 
+  /* The row name is editable too: a hand-corrected material callout is the
+     single most common reason to reach for this. */
   const layer = (n, name, cells) =>
-    `<tr><td class="mn">${n}</td><td class="ml">${esc(name)}</td>${cells}</tr>`;
+    `<tr><td class="mn">${n}</td><td class="ml">${ov(n + ".name", esc(name))}</td>${cells}</tr>`;
   const td = (v, cls) => `<td${cls ? ` class="${cls}"` : ""}>${v}</td>`;
+  /* One editable cell, keyed by its row and column so the key survives a save,
+     a revision and a reload. */
+  const c = (n, col, v) => td(ov(n + "." + col, v));
+  const inch = x => f(x) + "&Prime;";
 
   const base = `
     <table class="mds">
-      <thead><tr><th colspan="2">1 &nbsp; Base tube</th>
+      <thead><tr><th colspan="2">1 &nbsp; ${ov("h.1", "Base tube")}</th>
         <th>Wall, in</th><th>ID, in</th><th>OD, in</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
       <tbody>
-        ${layer("1.1", s.linerLabel || s.liner,  td(f3(s.skinThk)) + td(f3(s.base[0].id)) + td(f3(s.base[0].od))
-                                 + td(f4(s.base[0].wt)) + td(f0(Math.ceil(s.base[0].wt * mfgFt))))}
-        ${layer("1.2", s.bondLabel || s.bond,   td(f3(s.bondThk)) + td(f3(s.base[1].id)) + td(f3(s.base[1].od))
-                                 + td(f4(s.base[1].wt)) + td(f0(Math.ceil(s.base[1].wt * mfgFt))))}
-        ${layer("1.3", s.backerLabel || s.backer, td(f3(s.backerThk)) + td(f3(s.base[2].id)) + td(f3(s.baseOD))
-                                 + td(f4(s.base[2].wt)) + td(f0(Math.ceil(s.base[2].wt * mfgFt))))}
-        <tr class="tot"><td></td><td class="ml">Base tube, ovality 0&ndash;5%</td>
-          ${td(f3(s.specWT))}${td(f3(s.linerID))}${td(f3(s.baseOD))}
-          ${td(f4(s.baseWt))}${td(f0(Math.ceil(s.baseWt * mfgFt)))}</tr>
+        ${layer("1.1", s.linerLabel || s.liner,
+            c("1.1","wall",f3(s.skinThk)) + c("1.1","id",f3(s.base[0].id)) + c("1.1","od",f3(s.base[0].od))
+          + c("1.1","lbft",f4(s.base[0].wt)) + c("1.1","mfg",f0(Math.ceil(s.base[0].wt * mfgFt))))}
+        ${layer("1.2", s.bondLabel || s.bond,
+            c("1.2","wall",f3(s.bondThk)) + c("1.2","id",f3(s.base[1].id)) + c("1.2","od",f3(s.base[1].od))
+          + c("1.2","lbft",f4(s.base[1].wt)) + c("1.2","mfg",f0(Math.ceil(s.base[1].wt * mfgFt))))}
+        ${layer("1.3", s.backerLabel || s.backer,
+            c("1.3","wall",f3(s.backerThk)) + c("1.3","id",f3(s.base[2].id)) + c("1.3","od",f3(s.baseOD))
+          + c("1.3","lbft",f4(s.base[2].wt)) + c("1.3","mfg",f0(Math.ceil(s.base[2].wt * mfgFt))))}
+        <tr class="tot"><td></td><td class="ml">${ov("1.t.name", "Base tube, ovality 0&ndash;5%")}</td>
+          ${c("1.t","wall",f3(s.specWT))}${c("1.t","id",f3(s.linerID))}${c("1.t","od",f3(s.baseOD))}
+          ${c("1.t","lbft",f4(s.baseWt))}${c("1.t","mfg",f0(Math.ceil(s.baseWt * mfgFt)))}</tr>
       </tbody>
     </table>`;
 
   const kg = x => `${f(x, 1)} (${f(x / 2.2, 1)})`;
   const braidRows = [
-    layer("2.1", s.longsName, td(f0(s.longsQty)) + td("&mdash;") + td("&mdash;")
-          + td(f4(s.longsWt)) + td(kg(s.longsWtRaw * mfgFt))),
-    layer("2.2", s.xbraid, td("Pass 1") + td(f(s.pitch) + '"') + td(f3(s.A57))
-          + td(f4(s.xWt)) + td(kg(s.xWtPerPass * mfgFt)))
+    layer("2.1", s.longsName,
+        c("2.1","n",f0(s.longsQty)) + c("2.1","pitch","&mdash;") + c("2.1","od","&mdash;")
+      + c("2.1","lbft",f4(s.longsWt)) + c("2.1","mfg",kg(s.longsWtRaw * mfgFt))),
+    layer("2.2", s.xbraid,
+        c("2.2","n","Pass 1") + c("2.2","pitch",inch(s.pitch)) + c("2.2","od",f3(s.A57))
+      + c("2.2","lbft",f4(s.xWt)) + c("2.2","mfg",kg(s.xWtPerPass * mfgFt)))
   ];
   if (s.passes >= 2) braidRows.push(layer("2.3", s.xbraid,
-    td("Pass 2") + td(f(s.pitch2) + '"') + td(f3(s.A58)) + td("") + td(kg(s.xWtPerPass * mfgFt))));
+      c("2.3","n","Pass 2") + c("2.3","pitch",inch(s.pitch2)) + c("2.3","od",f3(s.A58))
+    + c("2.3","lbft","") + c("2.3","mfg",kg(s.xWtPerPass * mfgFt))));
   if (s.passes >= 3) braidRows.push(layer("2.4", s.xbraid,
-    td("Pass 3") + td(f(s.pitch3) + '"') + td(f3(s.A59)) + td("") + td(kg(s.xWtPerPass * mfgFt))));
+      c("2.4","n","Pass 3") + c("2.4","pitch",inch(s.pitch3)) + c("2.4","od",f3(s.A59))
+    + c("2.4","lbft","") + c("2.4","mfg",kg(s.xWtPerPass * mfgFt))));
   if (s.is24T) braidRows.push(layer("2.5", "24-Tensile · " + s.tBraid,
-    td("24 ends") + td(f(s.tPitch) + '"') + td("") + td(f4(s.tWt)) + td("")));
+      c("2.5","n","24 ends") + c("2.5","pitch",inch(s.tPitch)) + c("2.5","od","")
+    + c("2.5","lbft",f4(s.tWt)) + c("2.5","mfg","")));
 
   const braid = `
     <table class="mds">
-      <thead><tr><th colspan="2">2 &nbsp; Reinforcement</th>
+      <thead><tr><th colspan="2">2 &nbsp; ${ov("h.2", "Reinforcement")}</th>
         <th>Number / pass</th><th>Pitch &plusmn;0.040</th><th>OD, in</th><th>lbs/ft</th><th>Mfg lbs (kg)</th></tr></thead>
       <tbody>${braidRows.join("")}</tbody>
     </table>`;
 
   const cover = `
     <table class="mds">
-      <thead><tr><th colspan="2">3 &nbsp; Cover</th>
+      <thead><tr><th colspan="2">3 &nbsp; ${ov("h.3", "Cover")}</th>
         <th>Min wall</th><th>Wall, in</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
       <tbody>
-        ${layer("3.1", s.jacketLabel || s.jacket, td("&ge;0.070") + td(f4(s.jacketThk)) + td(f3(s.jacketOD))
-                + td(f4(s.jacketWt)) + td(f0(Math.ceil(s.jacketWt * mfgFt))))}
-        ${layer("3.2", s.colorLabel || s.colorMB, td("") + td("") + td("")
-                + td(f4(s.colorWt)) + td(f0(Math.ceil(s.colorWt * mfgFt))))}
-        <tr class="tot"><td></td><td class="ml">Finished product</td>
-          ${td("")}${td(f4(s.jacketThk))}${td(f3(s.jacketOD))}
-          ${td(f3(s.weightPerFt))}${td(f0(Math.ceil(s.weightPerFt * mfgFt)))}</tr>
+        ${layer("3.1", s.jacketLabel || s.jacket,
+            c("3.1","min","&ge;0.070") + c("3.1","wall",f4(s.jacketThk)) + c("3.1","od",f3(s.jacketOD))
+          + c("3.1","lbft",f4(s.jacketWt)) + c("3.1","mfg",f0(Math.ceil(s.jacketWt * mfgFt))))}
+        ${layer("3.2", s.colorLabel || s.colorMB,
+            c("3.2","min","") + c("3.2","wall","") + c("3.2","od","")
+          + c("3.2","lbft",f4(s.colorWt)) + c("3.2","mfg",f0(Math.ceil(s.colorWt * mfgFt))))}
+        <tr class="tot"><td></td><td class="ml">${ov("3.t.name", "Finished product")}</td>
+          ${c("3.t","min","")}${c("3.t","wall",f4(s.jacketThk))}${c("3.t","od",f3(s.jacketOD))}
+          ${c("3.t","lbft",f3(s.weightPerFt))}${c("3.t","mfg",f0(Math.ceil(s.weightPerFt * mfgFt)))}</tr>
       </tbody>
     </table>`;
 
   const reel = `
     <table class="mds">
-      <thead><tr><th colspan="2">4 &nbsp; Reel</th>
+      <thead><tr><th colspan="2">4 &nbsp; ${ov("h.4", "Reel")}</th>
         <th>SP</th><th>HD</th><th>T</th><th>Min bend</th><th>Per reel</th></tr></thead>
       <tbody>
-        <tr><td class="mn">4.1</td><td class="ml">Reel SP${f0(s.reelSP)}-HD${f0(s.reelHub)}-T${f0(s.reelT)}</td>
-          ${td(f0(s.reelSP))}${td(f0(s.reelHub))}${td(f0(s.reelT))}
-          ${td(f(s.minD, 1) + "D")}${td(f0(s.lenFinished) + " ft")}</tr>
-        <tr><td class="mn">4.2</td><td class="ml">Target length: base ${f0(s.lenBase)} ft &middot;
-          braid ${f0(s.lenBraid)} ft &middot; finished ${f0(s.lenFinished)} ft</td>
-          <td colspan="5">${f0(s.nReels)} reel(s) &middot; ${f0(s.reelWeight)} lbs each
-            (${f0(s.reelWeight / 2.2)} kg) &middot; max ${f0(s.reelMax)} ft</td>
+        <tr><td class="mn">4.1</td><td class="ml">${ov("4.1.name",
+            `Reel SP${f0(s.reelSP)}-HD${f0(s.reelHub)}-T${f0(s.reelT)}`)}</td>
+          ${c("4.1","sp",f0(s.reelSP))}${c("4.1","hd",f0(s.reelHub))}${c("4.1","t",f0(s.reelT))}
+          ${c("4.1","bend",f(s.minD, 1) + "D")}${c("4.1","per",f0(s.lenFinished) + " ft")}</tr>
+        <tr><td class="mn">4.2</td><td class="ml">${ov("4.2.name",
+            `Target length: base ${f0(s.lenBase)} ft &middot; braid ${f0(s.lenBraid)} ft &middot; finished ${f0(s.lenFinished)} ft`)}</td>
+          <td colspan="5">${ov("4.2.per",
+            `${f0(s.nReels)} reel(s) &middot; ${f0(s.reelWeight)} lbs each (${f0(s.reelWeight / 2.2)} kg) &middot; max ${f0(s.reelMax)} ft`)}</td>
         </tr>
       </tbody>
     </table>`;
 
   const print = `
     <table class="mds">
-      <thead><tr><th colspan="7">5 &nbsp; Print legend</th></tr></thead>
+      <thead><tr><th colspan="7">5 &nbsp; ${ov("h.5", "Print legend")}</th></tr></thead>
       <tbody>
-        <tr><td class="mn">5.1</td><td class="ml" colspan="6">${apiMark(s)}<span class="cell">${esc(s.printLine1)}</span></td></tr>
-        <tr><td class="mn">5.2</td><td class="ml" colspan="6"><span class="cell">${esc(s.printLine2)}</span></td></tr>
-        <tr><td class="mn">5.3</td><td class="ml" colspan="6"><span class="cell">${esc(s.printLine3)}</span></td></tr>
-        <tr><td class="mn">5.4</td><td class="ml" colspan="6">Date code is Year Month Day Hour,
-          e.g. 2022010910, suffix &ldquo;01&rdquo; for Stafford TX. Print every 3 ft,
-          minimum 1/4&Prime; character height.</td></tr>
+        <tr><td class="mn">5.1</td><td class="ml" colspan="6">${apiMark(s)}<span class="cell">${
+          ov("5.1", esc(s.printLine1))}</span></td></tr>
+        <tr><td class="mn">5.2</td><td class="ml" colspan="6"><span class="cell">${
+          ov("5.2", esc(s.printLine2))}</span></td></tr>
+        <tr><td class="mn">5.3</td><td class="ml" colspan="6"><span class="cell">${
+          ov("5.3", esc(s.printLine3))}</span></td></tr>
+        <tr><td class="mn">5.4</td><td class="ml" colspan="6">${ov("5.4",
+          `Date code is Year Month Day Hour, e.g. 2022010910, suffix &ldquo;01&rdquo; for Stafford TX. Print every 3 ft, minimum 1/4&Prime; character height.`)}</td></tr>
       </tbody>
     </table>`;
 
-  const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
+  const kv = (k, key, v) => `<div class="kv"><span>${k}</span><b>${ov(key, v)}</b></div>`;
 
   return ctrl + `
   <div class="sheetwrap">
-    <article class="mdsdoc" id="mdsDoc">
+    <article class="mdsdoc${EDIT ? " editing" : ""}" id="mdsDoc">
       <header class="mdshead">
         <div>
-          <h1>Manufacturing Datasheet</h1>
-          <p class="sub">Specialty RTP &middot; 11317 Cash Rd, Stafford TX 77477</p>
+          <h1>${ov("title", "Manufacturing Datasheet")}</h1>
+          <p class="sub">${ov("addr", "Specialty RTP &middot; 11317 Cash Rd, Stafford TX 77477")}</p>
         </div>
         <table class="meta">
           <tr><td>Document</td><th>${esc(d.doc_number || "—")}</th>
@@ -288,7 +362,7 @@ function sheetView() {
         </table>
       </header>
 
-      <h2 class="prod">${esc(s.productName)}</h2>
+      <h2 class="prod">${ov("prod", esc(s.productName))}</h2>
 
       <!-- Design pressure, temperature, service, hydrotest, service life and
            coupling are deliberately absent: they are design conditions, and
@@ -296,13 +370,14 @@ function sheetView() {
            immediately above. The MDS carries what the floor builds.
            API nominal stays: it also leads the Designer's headline strip. -->
       <div class="kvrow">
-        ${kv("Application", esc(s.app))}
-        ${kv("API nominal", f(s.apiNominal, 2) + " in")}
-        ${kv("FAT min burst", f0(fat) + " psi")}
-        ${kv("Length", f0(mfgFt) + " ft / " + f0(mfgFt / 3.28) + " m")}
+        ${kv("Application", "kv.app", esc(s.app))}
+        ${kv("API nominal", "kv.nom", f(s.apiNominal, 2) + " in")}
+        ${kv("FAT min burst", "kv.fat", f0(fat) + " psi")}
+        ${kv("Length", "kv.len", f0(mfgFt) + " ft / " + f0(mfgFt / 3.28) + " m")}
       </div>
-      <p class="basis">FAT basis: ${esc(fatLabel)}. Burst achieved ${f0(s.burstTotal)} psi at a
-        ${f(s.braidAngle, 1)}&deg; braid angle. Tensile ${f0(s.tensileStrength)} lbs.</p>
+      <p class="basis">${ov("basis",
+        `FAT basis: ${esc(fatLabel)}. Burst achieved ${f0(s.burstTotal)} psi at a ${
+          f(s.braidAngle, 1)}&deg; braid angle. Tensile ${f0(s.tensileStrength)} lbs.`)}</p>
 
       ${base}${braid}${cover}${reel}${print}
 
@@ -336,7 +411,25 @@ async function buildFromDesign(designId) {
   DOC.design_id = design.id;
   DOC.title = design.name;
   DOC.client = design.client || DOC.client;
+  EDIT = false; DIRTY = false;
   VIEW = "sheet";
+}
+
+/* Re-solve the design behind THIS document and swap in the new snapshot,
+   keeping everything the document itself owns: its identity and number, the
+   revision, the leads, notes, scrap, FAT basis and the hand edits. Building a
+   whole fresh document here instead would quietly drop all of that, which
+   matters much more now that hand edits are among the things it would drop. */
+async function reloadSnapshot() {
+  if (DOC.design_id) {
+    const design = await DB.loadDesign(DOC.design_id);
+    const solved = solve({ ...design.inputs, prices: H.prices() });
+    DOC.snapshot = { inputs: design.inputs, solved: pick(solved) };
+    DOC.price_book_id = H.bookId() || DOC.price_book_id;
+  } else {
+    DOC.snapshot = { inputs: H.inputs(), solved: pick(H.solved()) };
+  }
+  DIRTY = true;
 }
 
 document.addEventListener("click", async e => {
@@ -345,7 +438,10 @@ document.addEventListener("click", async e => {
   const del  = e.target.closest("[data-mdsdel]");
   const id   = e.target.id;
   try {
-    if (open) { DOC = await DB.loadMds(open.dataset.mdsopen); VIEW = "sheet"; H.refresh(); return; }
+    if (open) {
+      DOC = await DB.loadMds(open.dataset.mdsopen);
+      EDIT = false; DIRTY = false; VIEW = "sheet"; H.refresh(); return;
+    }
     if (del)  {
       if (!confirm("Delete this datasheet?")) return;
       await DB.deleteMds(del.dataset.mdsdel);
@@ -355,23 +451,54 @@ document.addEventListener("click", async e => {
     if (id === "mdsBackSheet") { VIEW = "sheet"; H.refresh(); return; }
     if (id === "mdsPrint")     { window.print(); return; }
 
+    if (id === "mdsEdit") {
+      /* Leaving edit mode commits whatever cell still has the caret in it:
+         the browser fires no blur when the markup is replaced underneath. */
+      if (EDIT) commitOpenCell();
+      EDIT = !EDIT; H.refresh();
+      status(EDIT ? "Free edit on — click any figure and type."
+                  : DIRTY ? "Free edit off. Edits are not saved yet."
+                          : "Free edit off.");
+      return;
+    }
+    if (id === "mdsResetOv") {
+      const n = ovCount();
+      if (!n) return;
+      if (!confirm(`Discard ${n} hand edit${n === 1 ? "" : "s"} and return the sheet `
+                 + `to what the design solves to?`)) return;
+      DOC.overrides = {}; DIRTY = true; H.refresh();
+      status(`Reset ${n} edit${n === 1 ? "" : "s"}.`);
+      return;
+    }
+
     if (id === "mdsFromDesigner") {
       DOC = fromCurrent(H.inputs(), H.solved(), H.bookId());
+      EDIT = false; DIRTY = false;
       VIEW = "sheet"; H.refresh(); status("Built from the current design."); return;
     }
     if (id === "mdsReload") {
-      if (DOC.design_id) await buildFromDesign(DOC.design_id);
-      else { DOC.snapshot = { inputs: H.inputs(), solved: pick(H.solved()) }; }
+      /* A hand edit sits on top of the snapshot, so it survives the swap and
+         can end up contradicting the figure underneath it. Say so rather than
+         silently keeping or silently dropping them. */
+      const n = ovCount();
+      if (n && !confirm(`This sheet has ${n} hand edit${n === 1 ? "" : "s"}, which stay `
+                      + `on top of the reloaded design and may now disagree with it.\n\n`
+                      + `Reload anyway? Reset edits afterwards to clear them.`)) return;
+      if (EDIT) commitOpenCell();
+      await reloadSnapshot();
       H.refresh(); status("Snapshot refreshed from the design."); return;
     }
     if (id === "mdsSave" || id === "mdsRevise") {
-      const row = { ...DOC };
+      if (EDIT) commitOpenCell();
+      const row = { ...DOC, overrides: ovEnsure() };
       if (id === "mdsRevise") { row.id = null; row.revision = nextRev(DOC.revision); }
       delete row.created_at; delete row.updated_at; delete row.created_by;
       const saved = await DB.saveMds(row);
-      DOC = saved; SAVED = await DB.listMds();
+      DOC = saved; DIRTY = false; SAVED = await DB.listMds();
       H.refresh();
-      status(`Saved ${saved.doc_number || saved.title} rev ${saved.revision}.`);
+      const n = ovCount();
+      status(`Saved ${saved.doc_number || saved.title} rev ${saved.revision}`
+           + `${n ? ` with ${n} hand edit${n === 1 ? "" : "s"}` : ""}.`);
       return;
     }
   } catch (err) { status(err.message, true); }
@@ -383,6 +510,81 @@ const nextRev = r => {
        : /^\d+$/.test(t)   ? String(Number(t) + 1) : t + "1";
 };
 
+/* ------------------------------------------------- free-edit capture --
+
+   The sheet is regenerated from the model on every refresh, so typing has to
+   be recorded into DOC.overrides and NOT refreshed as it happens - a refresh
+   mid-word would replace the element holding the caret and throw the cursor
+   out of the cell. So: record on input, redraw only once the cell is left.
+
+   Text is taken as innerText, never innerHTML: the override is stored as the
+   words the user typed and escaped again on the way out, so a pasted <b> or
+   an & in a material name prints as the characters they are. */
+
+function readCell(el) { return el.innerText.replace(/\s+/g, " ").trim(); }
+
+/* Records what a cell now holds and reports which of three things happened,
+   because the caller has to redraw for one of them and must not for the
+   others. "cleared" means the key is gone and the computed value belongs
+   back in the cell - which only a redraw can put there.
+
+   Clearing is deliberately NOT done while typing: a key deleted on the
+   keystroke that empties the cell would leave the blank element sitting
+   there with nothing left to tell the sheet to redraw it. Emptying is
+   therefore committed when the cell is left. */
+function recordCell(el, committing) {
+  const key = el.dataset.ov;
+  if (!key || !DOC) return "none";
+  const map = ovEnsure();
+  const typed = readCell(el);
+  const had = Object.prototype.hasOwnProperty.call(map, key);
+  if (!typed) {
+    if (!committing || !had) return "none";
+    delete map[key]; DIRTY = true; return "cleared";
+  }
+  if (map[key] === typed) return "none";
+  map[key] = typed; DIRTY = true;
+  return "set";
+}
+
+/* Whatever cell currently holds the caret, if any. */
+function commitOpenCell() {
+  const el = document.activeElement;
+  if (el && el.dataset && el.dataset.ov) recordCell(el, true);
+}
+
+document.addEventListener("input", e => {
+  const cell = e.target.closest ? e.target.closest("[data-ov]") : null;
+  if (!cell || !DOC) return;
+  /* Model only: no refresh while typing, or the element holding the caret
+     would be replaced mid-word. What a redraw would have updated - the cell's
+     own mark and the two buttons that count edits - is nudged by hand. */
+  const what = recordCell(cell, false);
+  if (what === "set") cell.classList.add("ovd");
+  const btn = document.getElementById("mdsResetOv");
+  if (btn) { const n = ovCount(); btn.disabled = !n; btn.textContent = `Reset edits (${n})`; }
+  const save = document.getElementById("mdsSave");
+  if (save && DIRTY) save.textContent = "Save edits";
+});
+
+/* Leaving the cell is the moment to commit it. A cell left empty has just
+   given up its override, so the sheet is redrawn to put the computed value
+   back; a cell with text in it needs no redraw, and redrawing on every blur
+   would throw away a click aimed straight at the next cell. */
+document.addEventListener("focusout", e => {
+  const cell = e.target.closest ? e.target.closest("[data-ov]") : null;
+  if (!cell || !DOC || !EDIT) return;
+  if (recordCell(cell, true) === "cleared") H.refresh();
+});
+
+/* Enter inside a one-line cell should finish it, not open a second line. */
+document.addEventListener("keydown", e => {
+  const cell = e.target.closest ? e.target.closest("[data-ov]") : null;
+  if (!cell) return;
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cell.blur(); }
+  if (e.key === "Escape") { e.preventDefault(); cell.blur(); }
+});
+
 document.addEventListener("change", async e => {
   if (!H) return;
   const f = e.target.closest(".mdsf");
@@ -392,9 +594,9 @@ document.addEventListener("change", async e => {
     if (f && DOC) {
       const k = f.dataset.f;
       DOC[k] = k === "scrap_pct" ? pct(Number(e.target.value) / 100) : e.target.value;
-      H.refresh(); return;
+      DIRTY = true; H.refresh(); return;
     }
-    if (basis && DOC) { DOC.burst_basis = basis.value; H.refresh(); return; }
+    if (basis && DOC) { DOC.burst_basis = basis.value; DIRTY = true; H.refresh(); return; }
     if (pick2 && pick2.value) { await buildFromDesign(pick2.value); H.refresh();
       status("Loaded."); return; }
   } catch (err) { status(err.message, true); }
