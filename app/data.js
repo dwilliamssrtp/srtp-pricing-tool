@@ -252,15 +252,21 @@ const SPOOL_STRAIN = [
    and claim API 15S. That split is what the sheets show, and they are two
    different purchase orders - if CGH ever moves a size between the two
    product lines, this is the field to change.                          */
+/* 1025, 1050 and 1075 are SOLID WALL: one nylon through all three base
+   layers, not the nylon/Admer/PP sandwich. Their datasheets print
+   Nylon - 290 three times, and our own pipe table calls 1.25 and 1.5
+   "Solid Wall". Only 2375 is multi-layer, and it alone leaves this unset.
+   Confirmed by the client 2026-10-29. */
+const CGH_SOLID_NYLON = ["Nylon - 290", "Nylon - 290", "Nylon - 290"];
 const CGH_LONGS  = "KN 15-3 (4 Ends Up - Longs)";
 const CGH_XBRAID = "KN 15-1 (4 EndsUp - Xbraids)";
 const CGH_DESIGNS = [
   { code:"LP1025", sizeKey:"1.25",  family:"lpgflex", prefix:"",
     psi:500, degF:150, degCLabel:65, longsQty:4, pitch:2.00, passes:1,
-    reel:{ sp:60, hub:42, t:48 } },
+    baseStack:CGH_SOLID_NYLON, reel:{ sp:60, hub:42, t:48 } },
   { code:"LP1050", sizeKey:"1.5",   family:"lpgflex", prefix:"",
     psi:500, degF:150, degCLabel:65, longsQty:4, pitch:2.50, passes:1,
-    reel:{ sp:60, hub:42, t:48 } },
+    baseStack:CGH_SOLID_NYLON, reel:{ sp:60, hub:42, t:48 } },
   /* Their 1075 sheet alone leads the print with the fractional size.
 
      It also prints ID 1.33" while its OWN base tube row on the same page
@@ -271,7 +277,7 @@ const CGH_DESIGNS = [
      document; clear it to print the ID actually built. ASK CGH. */
   { code:"LP1075", sizeKey:"1.75",  family:"lpgflex", prefix:"1-3/4\" Pipe: ",
     psi:500, degF:150, degCLabel:65, longsQty:4, pitch:3.00, passes:1,
-    printID:1.33, reel:{ sp:60, hub:42, t:48 } },
+    printID:1.33, baseStack:CGH_SOLID_NYLON, reel:{ sp:60, hub:42, t:48 } },
   { code:"LP2375", sizeKey:"2.375", family:"fpflex", dn:48,
     psi:500, degF:150, degCLabel:65, longsQty:8, pitch:4.00, passes:1,
     reel:{ sp:96, hub:68, t:56 } }
@@ -284,6 +290,7 @@ for (const c of CGH_DESIGNS) CGH_BY_CODE[c.code] = c;
 function cghInputs(c) {
   return { sizeKey:c.sizeKey, psi:c.psi, degF:c.degF, app:"Flowline",
            sour:"Sweet", color:"Yellow", colorPct:0.03,
+           baseStack:c.baseStack || null,
            longs:CGH_LONGS, longsQty:c.longsQty,
            xbraid:CGH_XBRAID, pitch:c.pitch, passes:c.passes,
            reelSP:c.reel.sp, reelHub:c.reel.hub, reelT:c.reel.t,

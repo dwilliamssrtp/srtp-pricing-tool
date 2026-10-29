@@ -4,7 +4,7 @@ import {
   BOND_BY_LINER, BACKER_SWEET, BACKER_SOUR, JACKET_SWEET, JACKET_SOUR,
   BRAID_FAMILY_BY_TEMP, API_NOMINAL, LPG_CODES, SPOOL_PIPE, matLabel,
   matCode, APP_CODES, sizeCode, CGH_BY_CODE
-} from "./data.js?v=20261029-1026";
+} from "./data.js?v=20261029-1039";
 
 /* =====================================================================
    SRTP Pricing Tool v7 — calculation engine
@@ -150,9 +150,16 @@ export function solve(inp) {
   /* ---------------- 2. material selection (Inputs!A35:A43, B27:C31) --- */
   const si = Math.max(0, SERVICES.indexOf(o.service));
   const linerTbl  = o.sour === "Sweet" ? LINER_SWEET  : LINER_SOUR;
-  o.liner  = (linerTbl[o.degF] || [])[si] || "";                         // A35
-  o.bond   = BOND_BY_LINER[matKey(o.liner)] || "";                       // A36
-  o.backer = (o.sour === "Sweet" ? BACKER_SWEET : BACKER_SOUR)[o.degF];  // A37
+  /* A design may DECLARE its base tube [liner, bond, backer] instead of
+     taking what the service and temperature tables pick. A solid wall is
+     one material through all three layers, and no lookup in the workbook
+     can say that - CGH's 1025, 1050 and 1075 are built that way. An entry
+     left empty falls back to the table, so a partial stack is allowed. */
+  const stack = Array.isArray(inp.baseStack) ? inp.baseStack : null;
+  o.liner  = (stack && stack[0]) || (linerTbl[o.degF] || [])[si] || "";  // A35
+  o.bond   = (stack && stack[1]) || BOND_BY_LINER[matKey(o.liner)] || ""; // A36
+  o.backer = (stack && stack[2])
+           || (o.sour === "Sweet" ? BACKER_SWEET : BACKER_SOUR)[o.degF]; // A37
   o.jacket = (o.sour === "Sweet" ? JACKET_SWEET : JACKET_SOUR)[o.degF];  // A42
   o.colorMB = o.color === "White" ? "PPMBUVWH - White Color Concentrate"
                                   : "PPMBUVYL - Yellow LPG";             // A43
