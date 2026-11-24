@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261124-1536";
-import { solve } from "./engine.js?v=20261124-1536";
+import * as DB from "./db.js?v=20261124-1545";
+import { solve } from "./engine.js?v=20261124-1545";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -252,7 +252,7 @@ function sheetView() {
   const base = `
     <table class="mds">
       <thead><tr><th colspan="2">1 &nbsp; ${ov("h.1", "Base tube")}</th>
-        <th>Wall, in &plusmn;0.01</th><th>ID, in &plusmn;0.01</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
+        <th>Wall, in &plusmn;0.01</th><th>ID, in &plusmn;0.01</th><th>OD, in (Tgt.)</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
       <tbody>
         ${layer("1.1", s.linerLabel || s.liner,
             c("1.1","wall",f3(s.skinThk)) + c("1.1","id",f3(s.base[0].id)) + c("1.1","od",f3(s.base[0].od))
@@ -291,7 +291,7 @@ function sheetView() {
   const braid = `
     <table class="mds">
       <thead><tr><th colspan="2">2 &nbsp; ${ov("h.2", "Reinforcement")}</th>
-        <th>Number / pass</th><th>Pitch &plusmn;0.040</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Mfg lbs (kg)</th></tr></thead>
+        <th>Number / pass</th><th>Pitch &plusmn;0.040</th><th>OD, in (Tgt.)</th><th>lbs/ft</th><th>Mfg lbs (kg)</th></tr></thead>
       <tbody>${braidRows.join("")}</tbody>
     </table>`;
 
