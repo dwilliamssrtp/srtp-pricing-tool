@@ -16,8 +16,8 @@
    safety factor. Rather than keep two near-identical sheets, that is a
    toggle here and the choice is stored with the document.
    ===================================================================== */
-import * as DB from "./db.js?v=20261029-1334";
-import { solve } from "./engine.js?v=20261029-1334";
+import * as DB from "./db.js?v=20261124-1523";
+import { solve } from "./engine.js?v=20261124-1523";
 
 let H = null;                     // host helpers from ui.js
 let DESIGNS = [], SAVED = [];
@@ -252,7 +252,7 @@ function sheetView() {
   const base = `
     <table class="mds">
       <thead><tr><th colspan="2">1 &nbsp; ${ov("h.1", "Base tube")}</th>
-        <th>Wall, in</th><th>ID, in</th><th>OD, in</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
+        <th>Wall, in &plusmn;0.01</th><th>ID, in &plusmn;0.01</th><th>OD, in (Tgt.)</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
       <tbody>
         ${layer("1.1", s.linerLabel || s.liner,
             c("1.1","wall",f3(s.skinThk)) + c("1.1","id",f3(s.base[0].id)) + c("1.1","od",f3(s.base[0].od))
@@ -291,14 +291,14 @@ function sheetView() {
   const braid = `
     <table class="mds">
       <thead><tr><th colspan="2">2 &nbsp; ${ov("h.2", "Reinforcement")}</th>
-        <th>Number / pass</th><th>Pitch &plusmn;0.040</th><th>OD, in</th><th>lbs/ft</th><th>Mfg lbs (kg)</th></tr></thead>
+        <th>Number / pass</th><th>Pitch &plusmn;0.040</th><th>OD, in (Tgt.)</th><th>lbs/ft</th><th>Mfg lbs (kg)</th></tr></thead>
       <tbody>${braidRows.join("")}</tbody>
     </table>`;
 
   const cover = `
     <table class="mds">
       <thead><tr><th colspan="2">3 &nbsp; ${ov("h.3", "Cover")}</th>
-        <th>Min wall</th><th>Wall, in</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
+        <th>Min wall</th><th>Wall, in &plusmn;0.01</th><th>OD, in &plusmn;0.01</th><th>lbs/ft</th><th>Mfg lbs (ref)</th></tr></thead>
       <tbody>
         ${layer("3.1", s.jacketLabel || s.jacket,
             c("3.1","min","&ge;0.070") + c("3.1","wall",f4(s.jacketThk)) + c("3.1","od",f3(s.jacketOD))
